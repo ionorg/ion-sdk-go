@@ -176,6 +176,12 @@ func (t *WebRTCTransport) AddProducer(file string) error {
 	return nil
 }
 
+func (t *WebRTCTransport) StopProducer() {
+	if t.producer != nil {
+		t.producer.Stop()
+	}
+}
+
 // OnConsume read rtp and drop
 func (t *WebRTCTransport) Subscribe() {
 	t.OnTrack(func(track *webrtc.Track, recv *webrtc.RTPReceiver) {

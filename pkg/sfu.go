@@ -35,7 +35,6 @@ type SFU struct {
 	mu         sync.RWMutex
 	onCloseFn  func()
 	transports map[string]*WebRTCTransport
-	stop       bool
 }
 
 // NewSFU intializes a new SFU client
