@@ -9,7 +9,7 @@ import (
 	"time"
 
 	log "github.com/pion/ion-log"
-	sfu "github.com/pion/ion-sfu/cmd/server/grpc/proto"
+	sfu "github.com/pion/ion-sfu/cmd/signal/grpc/proto"
 	"github.com/pion/webrtc/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
