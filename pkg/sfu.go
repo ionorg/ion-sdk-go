@@ -16,6 +16,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type dataChannelCmd struct {
+	StreamID string `mapstructure:"streamId"`
+	Video    string `mapstructure:"video"`
+	Audio    bool   `mapstructure:"audio"`
+}
+
+func (d dataChannelCmd) Marshal() ([]byte, error) {
+	return json.Marshal(d)
+}
+
 // SFU client
 type SFU struct {
 	ctx        context.Context
@@ -154,6 +164,33 @@ func (s *SFU) Join(sid string, t *WebRTCTransport) error {
 		if err != nil {
 			log.Errorf("OnIceCandidate error %s", err)
 		}
+	})
+
+	t.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
+		log.Infof("s=%v", s)
+		if s == webrtc.ICEConnectionStateConnected {
+			for _, sender := range t.pc.GetSenders() {
+				track := sender.Track()
+				if track != nil && t.dc != nil {
+					unmute := dataChannelCmd{
+						StreamID: track.Msid(),
+						Video:    "high",
+						Audio:    true,
+					}
+					log.Infof("unmute=%v", unmute)
+					unmuteByte, err := unmute.Marshal()
+					if err == nil {
+						err = t.dc.Send(unmuteByte)
+						if err != nil {
+							log.Errorf("t.dc.Send er=%v", err)
+						}
+					}
+				}
+
+			}
+
+		}
+
 	})
 
 	// t.OnTrack(func(track *webrtc.Track, recv *webrtc.RTPReceiver) {
