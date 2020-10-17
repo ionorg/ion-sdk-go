@@ -56,7 +56,7 @@ func NewWebRTCTransport(id string, cfg WebRTCTransportConfig) *WebRTCTransport {
 			if track != nil && dc != nil {
 				unmute := dataChannelCmd{
 					StreamID: track.Msid(),
-					Video:    "high",
+					Video:    "default",
 					Audio:    true,
 				}
 				log.Infof("unmute=%v", unmute)
