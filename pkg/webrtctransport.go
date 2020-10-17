@@ -23,6 +23,7 @@ type WebRTCTransportConfig struct {
 type WebRTCTransport struct {
 	id        string
 	pc        *webrtc.PeerConnection
+	dc        *webrtc.DataChannel
 	recvByte  int
 	onCloseFn func()
 	tracks    []*webrtc.Track
@@ -43,15 +44,16 @@ func NewWebRTCTransport(id string, cfg WebRTCTransportConfig) *WebRTCTransport {
 		return nil
 	}
 
-	// _, err = pc.CreateDataChannel("feedback", nil)
-	// if err != nil {
-	// log.Errorf("Error creating peer data channel: %s", err)
-	// return nil
-	// }
+	dc, err := pc.CreateDataChannel("ion-sfu", nil)
+	if err != nil {
+		log.Errorf("Error creating peer data channel: %s", err)
+		return nil
+	}
 
 	t := &WebRTCTransport{
 		id: id,
 		pc: pc,
+		dc: dc,
 	}
 
 	return t
@@ -123,9 +125,13 @@ func (t *WebRTCTransport) OnICECandidate(f func(c *webrtc.ICECandidate)) {
 	t.pc.OnICECandidate(f)
 }
 
+// OnICEConnectionStateChange sets an event handler which is invoked when ICE connection state changed.
+func (t *WebRTCTransport) OnICEConnectionStateChange(f func(c webrtc.ICEConnectionState)) {
+	t.pc.OnICEConnectionStateChange(f)
+}
+
 // AddProducer add a webm or mp4 file
 func (t *WebRTCTransport) AddProducer(file string) error {
-	log.Infof("1111")
 	ext := filepath.Ext(file)
 	switch ext {
 	case ".webm":
