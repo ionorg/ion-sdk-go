@@ -50,6 +50,27 @@ func NewWebRTCTransport(id string, cfg WebRTCTransportConfig) *WebRTCTransport {
 		return nil
 	}
 
+	dc.OnOpen(func() {
+		for _, sender := range pc.GetSenders() {
+			track := sender.Track()
+			if track != nil && dc != nil {
+				unmute := dataChannelCmd{
+					StreamID: track.Msid(),
+					Video:    "high",
+					Audio:    true,
+				}
+				log.Infof("unmute=%v", unmute)
+				unmuteByte, err := unmute.Marshal()
+				if err == nil {
+					err = dc.Send(unmuteByte)
+					if err != nil {
+						log.Errorf("t.dc.Send er=%v", err)
+					}
+				}
+			}
+
+		}
+	})
 	t := &WebRTCTransport{
 		id: id,
 		pc: pc,

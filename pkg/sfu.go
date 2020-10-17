@@ -166,33 +166,6 @@ func (s *SFU) Join(sid string, t *WebRTCTransport) error {
 		}
 	})
 
-	t.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
-		log.Infof("s=%v", s)
-		if s == webrtc.ICEConnectionStateConnected {
-			for _, sender := range t.pc.GetSenders() {
-				track := sender.Track()
-				if track != nil && t.dc != nil {
-					unmute := dataChannelCmd{
-						StreamID: track.Msid(),
-						Video:    "high",
-						Audio:    true,
-					}
-					log.Infof("unmute=%v", unmute)
-					unmuteByte, err := unmute.Marshal()
-					if err == nil {
-						err = t.dc.Send(unmuteByte)
-						if err != nil {
-							log.Errorf("t.dc.Send er=%v", err)
-						}
-					}
-				}
-
-			}
-
-		}
-
-	})
-
 	// t.OnTrack(func(track *webrtc.Track, recv *webrtc.RTPReceiver) {
 	// id := track.ID()
 	// log.Infof("Got track: %s", id)
