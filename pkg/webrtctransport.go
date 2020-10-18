@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math/rand"
 	"path/filepath"
+	"sync/atomic"
+	"time"
 
 	log "github.com/pion/ion-log"
 	"github.com/pion/webrtc/v3"
@@ -28,6 +30,7 @@ type WebRTCTransport struct {
 	onCloseFn func()
 	tracks    []*webrtc.Track
 	producer  producer
+	stop      uint32
 }
 
 // NewWebRTCTransport creates a new webrtc transport
@@ -87,6 +90,7 @@ func (t *WebRTCTransport) OnClose(f func()) {
 
 // Close the webrtc transport
 func (t *WebRTCTransport) Close() error {
+	atomic.StoreUint32(&t.stop, 1)
 	if t.onCloseFn != nil {
 		t.onCloseFn()
 	}
@@ -176,30 +180,29 @@ func (t *WebRTCTransport) AddProducer(file string) error {
 	return nil
 }
 
+// StopProducer stop the producer input stream
 func (t *WebRTCTransport) StopProducer() {
 	if t.producer != nil {
 		t.producer.Stop()
 	}
 }
 
-// OnConsume read rtp and drop
-func (t *WebRTCTransport) Subscribe() {
+// Subscribe to a file or address
+func (t *WebRTCTransport) Subscribe(output string) {
 	t.OnTrack(func(track *webrtc.Track, recv *webrtc.RTPReceiver) {
 		log.Infof("OnTrack: %v", track)
-		var lastNum uint16
 		for {
-			// Discard packet
-			packet, err := track.ReadRTP()
-			t.recvByte += packet.MarshalSize()
-			if err != nil {
-				log.Errorf("Error reading RTP packet %v", err)
+			if atomic.LoadUint32(&t.stop) == 1 {
 				return
 			}
-			seq := packet.Header.SequenceNumber
-			if seq != lastNum+1 {
-				// log.Infof("Packet out of order! prev %d current %d", lastNum, seq)
+			// Discard packet
+			packet, err := track.ReadRTP()
+			if err != nil {
+				log.Errorf("err=%v", err)
+				time.Sleep(time.Millisecond)
+				continue
 			}
-			lastNum = seq
+			t.recvByte += packet.MarshalSize()
 		}
 	})
 }
