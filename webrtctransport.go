@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	log "github.com/pion/ion-log"
@@ -36,6 +38,7 @@ type WebRTCTransport struct {
 
 	onCloseFn func()
 	producer  *WebMProducer
+	recvByte  int
 }
 
 // NewWebRTCTransport creates a new webrtc transport
@@ -172,27 +175,38 @@ func (t *WebRTCTransport) OnICECandidate(f func(c *webrtc.ICECandidate, target i
 }
 
 // AddProducer add a webm or mp4 file
-// func (t *WebRTCTransport) AddProducer(file string) error {
-// ext := filepath.Ext(file)
-// switch ext {
-// case ".webm":
-// t.producer = NewWebMProducer(file, 0)
-// default:
-// return errInvalidFile
-// }
-// if t.pub == nil {
-// return errors.New("invalid pub")
-// }
-// _, err := t.producer.AddTrack(t.pub.pc, "video")
-// if err != nil {
-// log.Infof("err=%v", err)
-// return err
-// }
-// _, err = t.producer.AddTrack(t.pub.pc, "audio")
-// if err != nil {
-// log.Infof("err=%v", err)
-// return err
-// }
-// t.producer.Start()
-// return nil
-// }
+func (t *WebRTCTransport) AddProducer(file string) error {
+	ext := filepath.Ext(file)
+	switch ext {
+	case ".webm":
+		t.producer = NewWebMProducer(file, 0)
+	default:
+		return errInvalidFile
+	}
+	if t.pub == nil {
+		return errors.New("invalid pub")
+	}
+	_, err := t.producer.AddTrack(t.pub.pc, "video")
+	if err != nil {
+		log.Infof("err=%v", err)
+		return err
+	}
+	_, err = t.producer.AddTrack(t.pub.pc, "audio")
+	if err != nil {
+		log.Infof("err=%v", err)
+		return err
+	}
+	t.producer.Start()
+	return nil
+}
+
+func (t *WebRTCTransport) GetBandWidth(cycle int) (int, int) {
+	var recvBW, sendBW int
+	if t.producer != nil {
+		sendBW = t.producer.GetSendBandwidth(cycle)
+	}
+
+	recvBW = t.recvByte / cycle / 1000
+	t.recvByte = 0
+	return recvBW, sendBW
+}
