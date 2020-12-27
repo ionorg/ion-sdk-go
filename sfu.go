@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	log "github.com/pion/ion-log"
 	sfu "github.com/pion/ion-sfu/cmd/signal/grpc/proto"
@@ -242,4 +244,31 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 	}()
 
 	return t, nil
+}
+
+// Stats show all sfu client stats
+func (s *SFU) Stats(cycle int) string {
+	for {
+		info := "\n-------stats-------\n"
+
+		s.mu.RLock()
+		if len(s.transports) == 0 {
+			s.mu.RUnlock()
+			continue
+		}
+		info += fmt.Sprintf("Transport: %d\n", len(s.transports))
+
+		totalRecvBW, totalSendBW := 0, 0
+		for _, transport := range s.transports {
+			recvBW, sendBW := transport.GetBandWidth(cycle)
+			totalRecvBW += recvBW
+			totalSendBW += sendBW
+		}
+
+		info += fmt.Sprintf("RecvBandWidth: %d KB/s\n", totalRecvBW)
+		info += fmt.Sprintf("SendBandWidth: %d KB/s\n", totalSendBW)
+		s.mu.RUnlock()
+		log.Infof(info)
+		time.Sleep(time.Duration(cycle) * time.Second)
+	}
 }
