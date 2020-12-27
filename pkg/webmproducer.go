@@ -3,7 +3,6 @@ package engine
 import (
 	"errors"
 	"math"
-	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -15,14 +14,14 @@ import (
 )
 
 var (
+	errInvalidFile = errors.New("invalid file")
 	errInvalidPC   = errors.New("invalid pc")
 	errInvalidKind = errors.New("invalid kind, shoud be audio or video")
 )
 
 type trackInfo struct {
-	track         *webrtc.Track
-	rate          int
-	lastFrameTime time.Duration
+	track *webrtc.TrackLocalStaticSample
+	rate  int
 }
 
 // WebMProducer support streaming by webm which encode with vp8 and opus
@@ -32,8 +31,8 @@ type WebMProducer struct {
 	paused        bool
 	pauseChan     chan bool
 	seekChan      chan time.Duration
-	videoTrack    *webrtc.Track
-	audioTrack    *webrtc.Track
+	videoTrack    *webrtc.TrackLocalStaticSample
+	audioTrack    *webrtc.TrackLocalStaticSample
 	offsetSeconds int
 	reader        *webm.Reader
 	webm          webm.WebM
@@ -71,11 +70,11 @@ func NewWebMProducer(name string, offset int) *WebMProducer {
 	return p
 }
 
-func (t *WebMProducer) AudioTrack() *webrtc.Track {
+func (t *WebMProducer) AudioTrack() *webrtc.TrackLocalStaticSample {
 	return t.audioTrack
 }
 
-func (t *WebMProducer) VideoTrack() *webrtc.Track {
+func (t *WebMProducer) VideoTrack() *webrtc.TrackLocalStaticSample {
 	return t.videoTrack
 }
 
@@ -102,7 +101,7 @@ func (t *WebMProducer) VideoCodec() string {
 }
 
 // AddTrack will add new track to pc
-func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc.Track, error) {
+func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc.TrackLocalStaticSample, error) {
 	if pc == nil {
 		return nil, errInvalidPC
 	}
@@ -110,27 +109,26 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 		return nil, errInvalidKind
 	}
 
-	var track *webrtc.Track
+	var track *webrtc.TrackLocalStaticSample
 	var err error
 	if kind == "video" {
 		if vTrack := t.webm.FindFirstVideoTrack(); vTrack != nil {
 			log.Infof("Video codec %v", vTrack.CodecID)
 
-			var videoCodedID uint8
+			var track *webrtc.TrackLocalStaticSample
 			switch vTrack.CodecID {
 			case "V_VP8":
-				videoCodedID = webrtc.DefaultPayloadTypeVP8
-				t.videoCodec = webrtc.VP8
+				t.videoCodec = webrtc.MimeTypeVP8
+				track, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, "video", "pion")
 			case "V_VP9":
-				videoCodedID = webrtc.DefaultPayloadTypeVP9
-				t.videoCodec = webrtc.VP9
+				t.videoCodec = webrtc.MimeTypeVP9
+				track, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP9, ClockRate: 90000}, "video", "pion")
 			default:
 				log.Errorf("Unsupported video codec %v", vTrack.CodecID)
 			}
 
-			track, err = pc.NewTrack(videoCodedID, rand.Uint32(), "video", "pion")
 			if err != nil {
-				return nil, err
+				panic(err)
 			}
 
 			pc.AddTrack(track)
@@ -141,7 +139,8 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 	} else if kind == "audio" {
 		if aTrack := t.webm.FindFirstAudioTrack(); aTrack != nil {
 			log.Infof("Audio codec %v", aTrack.CodecID)
-			track, err := pc.NewTrack(webrtc.DefaultPayloadTypeOpus, rand.Uint32(), "audio", "pion")
+			track, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, "video", "pion")
+
 			if err != nil {
 				panic(err)
 			}
@@ -216,10 +215,6 @@ func (t *WebMProducer) readLoop() {
 			log.Infof("Seek happened!!!!")
 			startTime = time.Now().Add(-seekDuration)
 			seekDuration = time.Duration(-1)
-			// Clear frame count tracking
-			for _, t := range t.trackMap {
-				t.lastFrameTime = 0
-			}
 			continue
 		}
 
@@ -231,14 +226,8 @@ func (t *WebMProducer) readLoop() {
 				time.Sleep(timeDiff - time.Millisecond)
 			}
 
-			// Calc frame time diff per track
-			diff := pck.Timecode - track.lastFrameTime
-			ms := float64(diff.Milliseconds()) / 1000.0
-			samps := uint32(float64(track.rate) * ms)
-			track.lastFrameTime = pck.Timecode
-
 			// Send samples
-			if ivfErr := track.track.WriteSample(media.Sample{Data: pck.Data, Samples: samps}); ivfErr != nil {
+			if ivfErr := track.track.WriteSample(media.Sample{Data: pck.Data}); ivfErr != nil {
 				log.Infof("Track write error=%v", ivfErr)
 			} else {
 				t.sendByte += len(pck.Data)
