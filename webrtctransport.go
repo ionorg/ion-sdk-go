@@ -25,8 +25,8 @@ const (
 
 // WebRTCTransportConfig represents configuration options
 type WebRTCTransportConfig struct {
-	configuration webrtc.Configuration
-	setting       webrtc.SettingEngine
+	Configuration webrtc.Configuration
+	Setting       webrtc.SettingEngine
 }
 
 type SFUFeedback struct {
