@@ -3,13 +3,19 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sync"
 
 	log "github.com/pion/ion-log"
 	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
 
 	"github.com/pion/webrtc/v3"
+)
+
+var (
+	errInvalidSubscriber = errors.New("invalid subscriber")
 )
 
 const (
@@ -39,6 +45,7 @@ type WebRTCTransport struct {
 	onCloseFn func()
 	producer  *WebMProducer
 	recvByte  int
+	notify    chan struct{}
 }
 
 // NewWebRTCTransport creates a new webrtc transport
@@ -89,25 +96,11 @@ func NewWebRTCTransport(id string, c Config) *WebRTCTransport {
 	}
 
 	t := &WebRTCTransport{
-		id:  id,
-		pub: pub,
-		sub: sub,
+		id:     id,
+		pub:    pub,
+		sub:    sub,
+		notify: make(chan struct{}),
 	}
-
-	sub.OnTrack(func(track *webrtc.TrackRemote, recv *webrtc.RTPReceiver) {
-		id := track.ID()
-		log.Infof("Got track: %s", id)
-		t.mu.Lock()
-		defer t.mu.Unlock()
-
-		if track.Kind() == webrtc.RTPCodecTypeVideo {
-			err := sub.pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{SenderSSRC: uint32(track.SSRC()), MediaSSRC: uint32(track.SSRC())}})
-			if err != nil {
-				log.Errorf("error writing pli %s", err)
-			}
-		}
-
-	})
 
 	return t
 }
@@ -209,4 +202,44 @@ func (t *WebRTCTransport) GetBandWidth(cycle int) (int, int) {
 	recvBW = t.recvByte / cycle / 1000
 	t.recvByte = 0
 	return recvBW, sendBW
+}
+
+func (t *WebRTCTransport) Subscribe(write func(pkt *rtp.Packet)) error {
+	if t.sub == nil {
+		return errInvalidSubscriber
+	}
+	t.sub.OnTrack(func(track *webrtc.TrackRemote, recv *webrtc.RTPReceiver) {
+		id := track.ID()
+		log.Infof("Got track: %s", id)
+		t.mu.Lock()
+		defer t.mu.Unlock()
+
+		if track.Kind() == webrtc.RTPCodecTypeVideo {
+			err := t.sub.pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{SenderSSRC: uint32(track.SSRC()), MediaSSRC: uint32(track.SSRC())}})
+			if err != nil {
+				log.Errorf("error writing pli %s", err)
+			}
+		}
+
+		for {
+			select {
+			case <-t.notify:
+				return
+			default:
+				pkt, _, err := track.ReadRTP()
+				if err != nil {
+					if err == io.EOF {
+						log.Errorf("track.ReadRTP err=%v", err)
+						return
+					}
+					log.Errorf("Error reading track rtp %s", err)
+					continue
+				}
+				if write != nil {
+					write(pkt)
+				}
+			}
+		}
+	})
+	return nil
 }
