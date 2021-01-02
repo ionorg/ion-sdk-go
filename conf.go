@@ -2,19 +2,19 @@ package engine
 
 import log "github.com/pion/ion-log"
 
-type iceconf struct {
+type ICEConf struct {
 	URLs       []string `mapstructure:"urls"`
 	Username   string   `mapstructure:"username"`
 	Credential string   `mapstructure:"credential"`
 }
 
-type webrtcconf struct {
+type WebRTCConf struct {
 	ICEPortRange []uint16  `mapstructure:"portrange"`
-	ICEServers   []iceconf `mapstructure:"iceserver"`
+	ICEServers   []ICEConf `mapstructure:"iceserver"`
 }
 
 // Config for base AVP
 type Config struct {
 	Log    log.Config `mapstructure:"log"`
-	WebRTC webrtcconf `mapstructure:"webrtc"`
+	WebRTC WebRTCConf `mapstructure:"webrtc"`
 }
