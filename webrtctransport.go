@@ -79,8 +79,8 @@ func NewWebRTCTransport(id string, c Config) *WebRTCTransport {
 	conf.ICEServers = iceServers
 
 	config := WebRTCTransportConfig{
-		setting:       se,
-		configuration: conf,
+		Setting:       se,
+		Configuration: conf,
 	}
 
 	pub, err := NewPublisher(config)

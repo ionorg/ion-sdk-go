@@ -16,8 +16,8 @@ type Publisher struct {
 
 // NewPublisher creates a new Publisher
 func NewPublisher(cfg WebRTCTransportConfig) (*Publisher, error) {
-	api := webrtc.NewAPI(webrtc.WithSettingEngine(cfg.setting))
-	pc, err := api.NewPeerConnection(cfg.configuration)
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(cfg.Setting))
+	pc, err := api.NewPeerConnection(cfg.Configuration)
 
 	if err != nil {
 		log.Errorf("NewPeer error: %v", err)

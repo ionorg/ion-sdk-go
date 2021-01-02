@@ -16,8 +16,8 @@ type Subscriber struct {
 func NewSubscriber(cfg WebRTCTransportConfig) (*Subscriber, error) {
 	me := &webrtc.MediaEngine{}
 	me.RegisterDefaultCodecs()
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(cfg.setting))
-	pc, err := api.NewPeerConnection(cfg.configuration)
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(cfg.Setting))
+	pc, err := api.NewPeerConnection(cfg.Configuration)
 
 	if err != nil {
 		log.Errorf("NewSubscriber error: %v", err)
