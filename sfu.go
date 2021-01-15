@@ -50,7 +50,7 @@ func NewSFU(addr string, config Config) (*SFU, error) {
 }
 
 // GetTransport returns a webrtc transport for a session
-func (s *SFU) GetTransport(sid string) (*WebRTCTransport, error) {
+func (s *SFU) GetTransport(sid, file string) (*WebRTCTransport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -59,7 +59,7 @@ func (s *SFU) GetTransport(sid string) (*WebRTCTransport, error) {
 	// no transport yet, create one
 	if t == nil {
 		var err error
-		if t, err = s.join(sid); err != nil {
+		if t, err = s.join(sid, file); err != nil {
 			return nil, err
 		}
 		t.OnClose(func() {
@@ -84,7 +84,7 @@ func (s *SFU) OnClose(f func()) {
 }
 
 // Join creates an sfu client and join the session.
-func (s *SFU) join(sid string) (*WebRTCTransport, error) {
+func (s *SFU) join(sid, file string) (*WebRTCTransport, error) {
 	log.Infof("Joining sfu session: %s", sid)
 
 	sfustream, err := s.client.Signal(s.ctx)
@@ -94,7 +94,7 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 		return nil, err
 	}
 
-	t := NewWebRTCTransport(sid, s.config)
+	t := NewWebRTCTransport(sid, file, s.config)
 
 	t.OnICECandidate(func(c *webrtc.ICECandidate, target int) {
 		if c == nil {
@@ -280,7 +280,7 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 			case *sfu.SignalReply_Trickle:
 				var candidate webrtc.ICECandidateInit
 				_ = json.Unmarshal([]byte(payload.Trickle.Init), &candidate)
-				log.Infof("candidate=%v", candidate)
+				log.Infof("type=%v candidate=%v", payload.Trickle.Target, candidate)
 				err := t.AddICECandidate(candidate, int(payload.Trickle.Target))
 				if err != nil {
 					log.Errorf("error adding ice candidate: %e", err)
