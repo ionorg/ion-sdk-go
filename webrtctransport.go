@@ -15,7 +15,9 @@ import (
 )
 
 var (
-	errInvalidSubscriber = errors.New("invalid subscriber")
+	errInvalidSubscriber  = errors.New("invalid subscriber")
+	errInvalidPublisher   = errors.New("invalid publisher")
+	errInvalidPublishFunc = errors.New("invalid publish func")
 )
 
 const (
@@ -42,16 +44,34 @@ type WebRTCTransport struct {
 	sub *Subscriber
 	mu  sync.RWMutex
 
-	onCloseFn func()
-	producer  *WebMProducer
-	recvByte  int
-	notify    chan struct{}
+	onCloseFn   func()
+	producer    *WebMProducer
+	recvByte    int
+	notify      chan struct{}
+	onPublishFn func(offer webrtc.SessionDescription) error
 }
 
 // NewWebRTCTransport creates a new webrtc transport
 func NewWebRTCTransport(id string, c Config) *WebRTCTransport {
 	conf := webrtc.Configuration{}
 	se := webrtc.SettingEngine{}
+	// se.SetICEMulticastDNSMode(ice.MulticastDNSModeQueryAndGather)
+	if c.WebRTC.ICELite {
+		se.SetLite(true)
+	} else {
+		var iceServers []webrtc.ICEServer
+		for _, iceServer := range c.WebRTC.ICEServers {
+			s := webrtc.ICEServer{
+				URLs:           iceServer.URLs,
+				Username:       iceServer.Username,
+				Credential:     iceServer.Credential,
+				CredentialType: iceServer.CredentialType,
+			}
+			iceServers = append(iceServers, s)
+		}
+
+		conf.ICEServers = iceServers
+	}
 
 	var icePortStart, icePortEnd uint16
 
@@ -66,23 +86,12 @@ func NewWebRTCTransport(id string, c Config) *WebRTCTransport {
 		}
 	}
 
-	var iceServers []webrtc.ICEServer
-	for _, iceServer := range c.WebRTC.ICEServers {
-		s := webrtc.ICEServer{
-			URLs:       iceServer.URLs,
-			Username:   iceServer.Username,
-			Credential: iceServer.Credential,
-		}
-		iceServers = append(iceServers, s)
-	}
-
-	conf.ICEServers = iceServers
-
 	config := WebRTCTransportConfig{
 		Setting:       se,
 		Configuration: conf,
 	}
 
+	log.Infof("config=%+v", config)
 	pub, err := NewPublisher(config)
 	if err != nil {
 		log.Errorf("Error creating peer connection: %s", err)
@@ -114,6 +123,7 @@ func (t *WebRTCTransport) OnClose(f func()) {
 func (t *WebRTCTransport) Close() error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	close(t.notify)
 
 	if t.onCloseFn != nil {
 		t.onCloseFn()
@@ -167,6 +177,10 @@ func (t *WebRTCTransport) OnICECandidate(f func(c *webrtc.ICECandidate, target i
 	})
 }
 
+func (t *WebRTCTransport) OnNegotiationNeeded(f func()) {
+	t.pub.OnNegotiationNeeded(f)
+}
+
 // AddProducer add a webm or mp4 file
 func (t *WebRTCTransport) AddProducer(file string) error {
 	ext := filepath.Ext(file)
@@ -204,10 +218,34 @@ func (t *WebRTCTransport) GetBandWidth(cycle int) (int, int) {
 	return recvBW, sendBW
 }
 
+// func (t *WebRTCTransport) Publish() error {
+// if t.pub == nil {
+// return errInvalidPublisher
+// }
+
+// log.Infof("t.pub.CreateOffer")
+// offer, err := t.pub.CreateOffer()
+// log.Infof("t.pub.CreateOffer off=%v", offer)
+// if err != nil {
+// log.Errorf("err=%v", err)
+// return err
+// }
+
+// if t.onPublishFn == nil {
+// return errInvalidPublishFunc
+// }
+// if t.producer != nil {
+// log.Infof("t.producer.Start")
+// t.producer.Start()
+// }
+// return t.onPublishFn(offer)
+// }
+
 func (t *WebRTCTransport) Subscribe(write func(pkt *rtp.Packet)) error {
 	if t.sub == nil {
 		return errInvalidSubscriber
 	}
+	log.Infof("OnTrack!!")
 	t.sub.OnTrack(func(track *webrtc.TrackRemote, recv *webrtc.RTPReceiver) {
 		id := track.ID()
 		log.Infof("Got track: %s", id)
@@ -235,6 +273,8 @@ func (t *WebRTCTransport) Subscribe(write func(pkt *rtp.Packet)) error {
 					log.Errorf("Error reading track rtp %s", err)
 					continue
 				}
+				log.Infof("track.Kind = %v len=%d", track.Kind(), len(pkt.Raw))
+				t.recvByte += len(pkt.Raw)
 				if write != nil {
 					write(pkt)
 				}
@@ -242,4 +282,8 @@ func (t *WebRTCTransport) Subscribe(write func(pkt *rtp.Packet)) error {
 		}
 	})
 	return nil
+}
+
+func (t *WebRTCTransport) OnPublish(f func(offer webrtc.SessionDescription) error) {
+	t.onPublishFn = f
 }

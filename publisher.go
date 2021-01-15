@@ -59,15 +59,18 @@ func (p *Publisher) AddProducer(file string) error {
 }
 
 func (p *Publisher) CreateOffer() (webrtc.SessionDescription, error) {
+	log.Infof("CreateOffer")
 	offer, err := p.pc.CreateOffer(nil)
 	if err != nil {
 		return webrtc.SessionDescription{}, err
 	}
 
+	log.Infof("p.pc.SetLocalDescription")
 	err = p.pc.SetLocalDescription(offer)
 	if err != nil {
 		return webrtc.SessionDescription{}, err
 	}
+	log.Infof("CreateOffer ok!!")
 
 	return offer, nil
 }
@@ -75,6 +78,10 @@ func (p *Publisher) CreateOffer() (webrtc.SessionDescription, error) {
 // OnICECandidate handler
 func (p *Publisher) OnICECandidate(f func(c *webrtc.ICECandidate)) {
 	p.pc.OnICECandidate(f)
+}
+
+func (p *Publisher) OnNegotiationNeeded(f func()) {
+	p.pc.OnNegotiationNeeded(f)
 }
 
 // AddICECandidate to peer connection

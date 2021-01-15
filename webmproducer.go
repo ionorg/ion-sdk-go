@@ -131,7 +131,11 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 				panic(err)
 			}
 
-			pc.AddTrack(track)
+			_, err = pc.AddTrack(track)
+			if err != nil {
+				log.Errorf("err=%v", err)
+				return nil, err
+			}
 			t.trackMap[vTrack.TrackNumber] = &trackInfo{track: track, rate: 90000}
 			t.videoTrack = track
 			log.Infof("t.trackMap=%+v", t.trackMap)
@@ -146,6 +150,10 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 			}
 
 			pc.AddTrack(track)
+			if err != nil {
+				log.Errorf("err=%v", err)
+				return nil, err
+			}
 			t.trackMap[aTrack.TrackNumber] = &trackInfo{
 				track: track,
 				rate:  int(aTrack.Audio.OutputSamplingFrequency),
@@ -230,6 +238,7 @@ func (t *WebMProducer) readLoop() {
 			if ivfErr := track.track.WriteSample(media.Sample{Data: pck.Data}); ivfErr != nil {
 				log.Infof("Track write error=%v", ivfErr)
 			} else {
+				// log.Infof("track=%v len=%v", track.track.Kind(), len(pck.Data))
 				t.sendByte += len(pck.Data)
 			}
 		}

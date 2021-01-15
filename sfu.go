@@ -16,6 +16,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var streamLock sync.Mutex
+
 // SFU client
 type SFU struct {
 	ctx        context.Context
@@ -69,6 +71,7 @@ func (s *SFU) GetTransport(sid string) (*WebRTCTransport, error) {
 				s.onCloseFn()
 			}
 		})
+		// t.OnPublish(s.Publish)
 		s.transports[sid] = t
 	}
 
@@ -93,6 +96,62 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 
 	t := NewWebRTCTransport(sid, s.config)
 
+	t.OnICECandidate(func(c *webrtc.ICECandidate, target int) {
+		if c == nil {
+			// Gathering done
+			log.Infof("gather candidate done")
+			return
+		}
+		bytes, err := json.Marshal(c.ToJSON())
+		if err != nil {
+			log.Errorf("OnIceCandidate error %s", err)
+		}
+		log.Infof("send ice candidate=%v", string(bytes))
+		streamLock.Lock()
+		err = sfustream.Send(&sfu.SignalRequest{
+			Payload: &sfu.SignalRequest_Trickle{
+				Trickle: &sfu.Trickle{
+					Init:   string(bytes),
+					Target: sfu.Trickle_Target(target),
+				},
+			},
+		})
+		streamLock.Unlock()
+		if err != nil {
+			log.Errorf("OnIceCandidate error %s", err)
+		}
+	})
+
+	t.OnNegotiationNeeded(func() {
+		log.Infof("t.OnNegotiationNeeded")
+		offer, err := t.CreateOffer()
+		if err != nil {
+			log.Errorf("Error creating offer: %v", err)
+			return
+		}
+
+		marshalled, err := json.Marshal(offer)
+		if err != nil {
+			return
+		}
+
+		log.Infof("Send offer:\n %s", offer.SDP)
+		// streamLock.Lock()
+		err = sfustream.Send(
+			&sfu.SignalRequest{
+				Payload: &sfu.SignalRequest_Description{
+					Description: marshalled,
+				},
+			},
+		)
+		// streamLock.Unlock()
+
+		if err != nil {
+			log.Errorf("Error sending publish request: %v", err)
+		}
+
+	})
+
 	offer, err := t.CreateOffer()
 	if err != nil {
 		log.Errorf("Error creating offer: %v", err)
@@ -104,7 +163,8 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 		return nil, err
 	}
 
-	log.Debugf("Send offer:\n %s", offer.SDP)
+	log.Infof("Send offer:\n %s", offer.SDP)
+	// streamLock.Lock()
 	err = sfustream.Send(
 		&sfu.SignalRequest{
 			Payload: &sfu.SignalRequest_Join{
@@ -115,38 +175,19 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 			},
 		},
 	)
+	// streamLock.Unlock()
 
 	if err != nil {
 		log.Errorf("Error sending publish request: %v", err)
 		return nil, err
 	}
 
-	t.OnICECandidate(func(c *webrtc.ICECandidate, target int) {
-		if c == nil {
-			// Gathering done
-			return
-		}
-		bytes, err := json.Marshal(c.ToJSON())
-		if err != nil {
-			log.Errorf("OnIceCandidate error %s", err)
-		}
-		err = sfustream.Send(&sfu.SignalRequest{
-			Payload: &sfu.SignalRequest_Trickle{
-				Trickle: &sfu.Trickle{
-					Init:   string(bytes),
-					Target: sfu.Trickle_Target(target),
-				},
-			},
-		})
-		if err != nil {
-			log.Errorf("OnIceCandidate error %s", err)
-		}
-	})
-
 	go func() {
 		// Handle sfu stream messages
 		for {
+			// streamLock.Lock()
 			res, err := sfustream.Recv()
+			// streamLock.Unlock()
 
 			if err != nil {
 				if err == io.EOF {
@@ -175,7 +216,7 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 			switch payload := res.Payload.(type) {
 			case *sfu.SignalReply_Join:
 				// Set the remote SessionDescription
-				log.Debugf("got answer: %s", payload.Join.Description)
+				log.Infof("got answer: %s", payload.Join.Description)
 
 				var sdp webrtc.SessionDescription
 				err := json.Unmarshal(payload.Join.Description, &sdp)
@@ -200,6 +241,7 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 				if sdp.Type == webrtc.SDPTypeOffer {
 					log.Debugf("got offer: %v", sdp)
 
+					log.Infof("dddddddddddddddddd=%+v", sdp)
 					var answer webrtc.SessionDescription
 					answer, err = t.Answer(sdp)
 					if err != nil {
@@ -213,11 +255,14 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 						continue
 					}
 
+					log.Infof("sssssssssssssssssss=%+v", answer)
+					// streamLock.Lock()
 					err = sfustream.Send(&sfu.SignalRequest{
 						Payload: &sfu.SignalRequest_Description{
 							Description: marshalled,
 						},
 					})
+					// streamLock.Unlock()
 
 					if err != nil {
 						log.Errorf("negotiate error %s", err)
@@ -235,10 +280,13 @@ func (s *SFU) join(sid string) (*WebRTCTransport, error) {
 			case *sfu.SignalReply_Trickle:
 				var candidate webrtc.ICECandidateInit
 				_ = json.Unmarshal([]byte(payload.Trickle.Init), &candidate)
+				log.Infof("candidate=%v", candidate)
 				err := t.AddICECandidate(candidate, int(payload.Trickle.Target))
 				if err != nil {
 					log.Errorf("error adding ice candidate: %e", err)
 				}
+			default:
+				log.Errorf("Unknow signal type!!!!%v", payload)
 			}
 		}
 	}()
