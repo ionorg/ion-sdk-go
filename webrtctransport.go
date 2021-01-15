@@ -52,7 +52,7 @@ type WebRTCTransport struct {
 }
 
 // NewWebRTCTransport creates a new webrtc transport
-func NewWebRTCTransport(id string, c Config) *WebRTCTransport {
+func NewWebRTCTransport(id, file string, c Config) *WebRTCTransport {
 	conf := webrtc.Configuration{}
 	se := webrtc.SettingEngine{}
 	// se.SetICEMulticastDNSMode(ice.MulticastDNSModeQueryAndGather)
@@ -96,6 +96,9 @@ func NewWebRTCTransport(id string, c Config) *WebRTCTransport {
 	if err != nil {
 		log.Errorf("Error creating peer connection: %s", err)
 		return nil
+	}
+	if file != "" {
+		pub.AddProducer(file)
 	}
 
 	sub, err := NewSubscriber(config)
