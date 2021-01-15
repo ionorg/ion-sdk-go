@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"errors"
 	"math"
 	"os"
 	"strings"
@@ -11,12 +10,6 @@ import (
 	log "github.com/pion/ion-log"
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
-)
-
-var (
-	errInvalidFile = errors.New("invalid file")
-	errInvalidPC   = errors.New("invalid pc")
-	errInvalidKind = errors.New("invalid kind, shoud be audio or video")
 )
 
 type trackInfo struct {
@@ -149,7 +142,7 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 				panic(err)
 			}
 
-			pc.AddTrack(track)
+			_, err = pc.AddTrack(track)
 			if err != nil {
 				log.Errorf("err=%v", err)
 				return nil, err

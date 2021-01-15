@@ -14,12 +14,6 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-var (
-	errInvalidSubscriber  = errors.New("invalid subscriber")
-	errInvalidPublisher   = errors.New("invalid publisher")
-	errInvalidPublishFunc = errors.New("invalid publish func")
-)
-
 const (
 	publisher  = 0
 	subscriber = 1
