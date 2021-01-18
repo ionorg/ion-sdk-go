@@ -124,7 +124,10 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 				panic(err)
 			}
 
-			_, err = pc.AddTrack(track)
+			// _, err = pc.AddTrack(track)
+			_, err = pc.AddTransceiverFromTrack(track, webrtc.RTPTransceiverInit{
+				Direction: webrtc.RTPTransceiverDirectionSendonly,
+			})
 			if err != nil {
 				log.Errorf("err=%v", err)
 				return nil, err
@@ -142,7 +145,10 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 				panic(err)
 			}
 
-			_, err = pc.AddTrack(track)
+			// _, err = pc.AddTrack(track)
+			_, err = pc.AddTransceiverFromTrack(track, webrtc.RTPTransceiverInit{
+				Direction: webrtc.RTPTransceiverDirectionSendonly,
+			})
 			if err != nil {
 				log.Errorf("err=%v", err)
 				return nil, err
@@ -231,7 +237,7 @@ func (t *WebMProducer) readLoop() {
 			if ivfErr := track.track.WriteSample(media.Sample{Data: pck.Data}); ivfErr != nil {
 				log.Infof("Track write error=%v", ivfErr)
 			} else {
-				// log.Infof("track=%v len=%v", track.track.Kind(), len(pck.Data))
+				log.Infof("track=%v len=%v", track.track.Kind(), len(pck.Data))
 				t.sendByte += len(pck.Data)
 			}
 		}
