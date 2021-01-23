@@ -1,19 +1,20 @@
 package engine
 
 import (
-	"encoding/json"
-
+	"github.com/pion/ice/v2"
 	log "github.com/pion/ion-log"
 	"github.com/pion/webrtc/v3"
 )
 
+// Transport is pub/sub transport
 type Transport struct {
-	api        *webrtc.DataChannel
-	signal     *Signal
-	pc         *webrtc.PeerConnection
-	role       int
-	config     WebRTCTransportConfig
-	candidates []webrtc.ICECandidateInit
+	api            *webrtc.DataChannel
+	signal         *Signal
+	pc             *webrtc.PeerConnection
+	role           int
+	config         WebRTCTransportConfig
+	SendCandidates []*webrtc.ICECandidate
+	RecvCandidates []webrtc.ICECandidateInit
 }
 
 // NewTransport create a transport
@@ -27,6 +28,7 @@ func NewTransport(role int, signal *Signal, cfg WebRTCTransportConfig) *Transpor
 
 	me := &webrtc.MediaEngine{}
 	_ = me.RegisterDefaultCodecs()
+	cfg.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(cfg.Setting))
 	t.pc, err = api.NewPeerConnection(cfg.Configuration)
 
@@ -50,12 +52,16 @@ func NewTransport(role int, signal *Signal, cfg WebRTCTransportConfig) *Transpor
 			log.Infof("gather candidate done")
 			return
 		}
-		bytes, err := json.Marshal(c.ToJSON())
-		if err != nil {
-			log.Errorf("OnIceCandidate error %s", err)
+		//append before join session success
+		if t.pc.CurrentRemoteDescription() == nil {
+			t.SendCandidates = append(t.SendCandidates, c)
+		} else {
+			for _, cand := range t.SendCandidates {
+				t.signal.Trickle(cand, role)
+			}
+			t.SendCandidates = []*webrtc.ICECandidate{}
+			t.signal.Trickle(c, role)
 		}
-		log.Infof("send ice candidate=%v role=%v", string(bytes), role)
-		t.signal.Trickle(c, role)
 	})
 	return t
 }
