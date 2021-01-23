@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"strings"
@@ -104,18 +105,19 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 
 	var track *webrtc.TrackLocalStaticSample
 	var err error
+	// streamId := fmt.Sprintf("%d", time.Now().UnixNano())
+	streamId := fmt.Sprintf("webm_%p", t)
 	if kind == "video" {
 		if vTrack := t.webm.FindFirstVideoTrack(); vTrack != nil {
-			log.Infof("Video codec %v", vTrack.CodecID)
 
 			var track *webrtc.TrackLocalStaticSample
 			switch vTrack.CodecID {
 			case "V_VP8":
 				t.videoCodec = webrtc.MimeTypeVP8
-				track, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, "video", "pion")
+				track, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, "video", streamId)
 			case "V_VP9":
 				t.videoCodec = webrtc.MimeTypeVP9
-				track, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP9, ClockRate: 90000}, "video", "pion")
+				track, err = webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP9, ClockRate: 90000}, "video", streamId)
 			default:
 				log.Errorf("Unsupported video codec %v", vTrack.CodecID)
 			}
@@ -124,25 +126,29 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 				panic(err)
 			}
 
-			_, err = pc.AddTrack(track)
+			// _, err = pc.AddTrack(track)
+			_, err = pc.AddTransceiverFromTrack(track, webrtc.RTPTransceiverInit{
+				Direction: webrtc.RTPTransceiverDirectionSendonly,
+			})
 			if err != nil {
 				log.Errorf("err=%v", err)
 				return nil, err
 			}
 			t.trackMap[vTrack.TrackNumber] = &trackInfo{track: track, rate: 90000}
 			t.videoTrack = track
-			log.Infof("t.trackMap=%+v", t.trackMap)
 		}
 	} else if kind == "audio" {
 		if aTrack := t.webm.FindFirstAudioTrack(); aTrack != nil {
-			log.Infof("Audio codec %v", aTrack.CodecID)
-			track, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, "video", "pion")
+			track, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2}, "audio", streamId)
 
 			if err != nil {
 				panic(err)
 			}
 
-			_, err = pc.AddTrack(track)
+			// _, err = pc.AddTrack(track)
+			_, err = pc.AddTransceiverFromTrack(track, webrtc.RTPTransceiverInit{
+				Direction: webrtc.RTPTransceiverDirectionSendonly,
+			})
 			if err != nil {
 				log.Errorf("err=%v", err)
 				return nil, err
@@ -152,7 +158,6 @@ func (t *WebMProducer) AddTrack(pc *webrtc.PeerConnection, kind string) (*webrtc
 				rate:  int(aTrack.Audio.OutputSamplingFrequency),
 			}
 			t.audioTrack = track
-			log.Infof("t.trackMap=%+v", t.trackMap)
 		}
 	}
 
@@ -228,10 +233,10 @@ func (t *WebMProducer) readLoop() {
 			}
 
 			// Send samples
-			if ivfErr := track.track.WriteSample(media.Sample{Data: pck.Data}); ivfErr != nil {
+			if ivfErr := track.track.WriteSample(media.Sample{Data: pck.Data, Duration: time.Millisecond * 20}); ivfErr != nil {
 				log.Infof("Track write error=%v", ivfErr)
 			} else {
-				// log.Infof("track=%v len=%v", track.track.Kind(), len(pck.Data))
+				// log.Infof("mime=%v kind=%v streamid=%v len=%v", track.track.Codec().MimeType, track.track.Kind(), track.track.StreamID(), len(pck.Data))
 				t.sendByte += len(pck.Data)
 			}
 		}
