@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// Signal is a wrapper of grpc
 type Signal struct {
 	client pb.SFUClient
 	stream pb.SFU_SignalClient
@@ -22,11 +23,12 @@ type Signal struct {
 	OnTrickle      func(candidate webrtc.ICECandidateInit, target int)
 	OnSetRemoteSDP func(webrtc.SessionDescription) error
 
-	ctx        context.Context
-	cancel     context.CancelFunc
-	signalLock sync.Mutex
+	ctx    context.Context
+	cancel context.CancelFunc
+	sync.Mutex
 }
 
+// NewSignal create a grpc signaler
 func NewSignal(addr string) *Signal {
 	s := &Signal{}
 	log.Infof("Connecting to sfu: %s", addr)
@@ -43,22 +45,16 @@ func NewSignal(addr string) *Signal {
 	if err != nil {
 		log.Errorf("err=%v", err)
 	}
-	go s.OnSignalHandle()
+	go s.onSignalHandle()
 	return s
 }
 
-func (s *Signal) OnSignalHandle() {
-	log.Infof("s.stream=%v", s.stream)
-	// stream, err := s.client.Signal(s.ctx)
-	// if err != nil {
-	// log.Errorf("error creating sfu stream: %s", err)
-	// return
-	// }
+func (s *Signal) onSignalHandle() {
 	for {
+		//only one goroutine for recving from stream, no need to lock
 		res, err := s.stream.Recv()
 		if err != nil {
 			if err == io.EOF {
-				// WebRTC Transport closed
 				log.Infof("WebRTC Transport Closed")
 				err = s.stream.CloseSend()
 				if err != nil {
@@ -83,66 +79,57 @@ func (s *Signal) OnSignalHandle() {
 		switch payload := res.Payload.(type) {
 		case *pb.SignalReply_Join:
 			// Set the remote SessionDescription
-			log.Infof("got answer: %s", payload.Join.Description)
+			log.Infof("[join] got answer: %s", payload.Join.Description)
 
 			var sdp webrtc.SessionDescription
 			err := json.Unmarshal(payload.Join.Description, &sdp)
 			if err != nil {
-				log.Errorf("sdp unmarshal error: %v", err)
+				log.Errorf("[join] sdp unmarshal error: %v", err)
 				return
 			}
 
 			if err = s.OnSetRemoteSDP(sdp); err != nil {
-				log.Errorf("join error %s", err)
+				log.Errorf("[join] s.OnSetRemoteSDP error %s", err)
 				return
 			}
-
 		case *pb.SignalReply_Description:
 			var sdp webrtc.SessionDescription
 			err := json.Unmarshal(payload.Description, &sdp)
 			if err != nil {
-				log.Errorf("sdp unmarshal error: %v", err)
+				log.Errorf("[description] sdp unmarshal error: %v", err)
 				return
 			}
 			if sdp.Type == webrtc.SDPTypeOffer {
-				log.Debugf("got offer: %v", sdp)
-
-				log.Infof("s.client.OnNegotiate=%+v", sdp)
+				log.Infof("[description] got offer call s.OnNegotiate sdp=%+v", sdp)
 				err := s.OnNegotiate(sdp)
 				if err != nil {
 					log.Errorf("err=%v", err)
 				}
 			} else if sdp.Type == webrtc.SDPTypeAnswer {
-				log.Debugf("got answer: %v", sdp)
+				log.Infof("[description] got answer call s.OnSetRemoteSDP sdp=%+v", sdp)
 				err = s.OnSetRemoteSDP(sdp)
-
 				if err != nil {
-					log.Errorf("negotiate error %s", err)
-					continue
+					log.Errorf("[description] s.OnSetRemoteSDP err=%s", err)
 				}
 			}
 		case *pb.SignalReply_Trickle:
 			var candidate webrtc.ICECandidateInit
 			_ = json.Unmarshal([]byte(payload.Trickle.Init), &candidate)
-			log.Infof("type=%v candidate=%v", payload.Trickle.Target, candidate)
+			log.Infof("[trickle] type=%v candidate=%v", payload.Trickle.Target, candidate)
 			s.OnTrickle(candidate, int(payload.Trickle.Target))
 		default:
-			log.Errorf("Unknow signal type!!!!%v", payload)
+			// log.Errorf("Unknow signal type!!!!%v", payload)
 		}
 	}
 }
 
 func (s *Signal) Join(sid string, offer webrtc.SessionDescription) error {
-	log.Infof("sid=%v offer=%v", sid, offer)
+	log.Infof("[Signal.Join] sid=%v offer=%v", sid, offer)
 	marshalled, err := json.Marshal(offer)
 	if err != nil {
 		return err
 	}
-	// stream, err := s.client.Signal(s.ctx)
-	// if err != nil {
-	// return err
-	// }
-	s.signalLock.Lock()
+	s.Lock()
 	err = s.stream.Send(
 		&pb.SignalRequest{
 			Payload: &pb.SignalRequest_Join{
@@ -153,7 +140,7 @@ func (s *Signal) Join(sid string, offer webrtc.SessionDescription) error {
 			},
 		},
 	)
-	s.signalLock.Unlock()
+	s.Unlock()
 	if err != nil {
 		log.Errorf("err=%v", err)
 	}
@@ -161,17 +148,13 @@ func (s *Signal) Join(sid string, offer webrtc.SessionDescription) error {
 }
 
 func (s *Signal) Trickle(candidate *webrtc.ICECandidate, target int) {
+	log.Infof("[Signal.Trickle] candidate=%v target=%v", candidate, target)
 	bytes, err := json.Marshal(candidate.ToJSON())
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return
 	}
-	// stream, err := s.client.Signal(s.ctx)
-	// if err != nil {
-	// log.Errorf("err=%v", err)
-	// return
-	// }
-	s.signalLock.Lock()
+	s.Lock()
 	err = s.stream.Send(&pb.SignalRequest{
 		Payload: &pb.SignalRequest_Trickle{
 			Trickle: &pb.Trickle{
@@ -180,26 +163,21 @@ func (s *Signal) Trickle(candidate *webrtc.ICECandidate, target int) {
 			},
 		},
 	})
-	s.signalLock.Unlock()
+	s.Unlock()
 	if err != nil {
 		log.Errorf("err=%v", err)
 	}
 }
 
 func (s *Signal) Offer(sdp webrtc.SessionDescription) {
+	log.Infof("[Signal.Offer] sdp=%v", sdp)
 	marshalled, err := json.Marshal(sdp)
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return
 	}
 
-	// stream, err := s.client.Signal(s.ctx)
-	// if err != nil {
-	// log.Errorf("err=%v", err)
-	// return
-	// }
-
-	s.signalLock.Lock()
+	s.Lock()
 	err = s.stream.Send(
 		&pb.SignalRequest{
 			Payload: &pb.SignalRequest_Description{
@@ -207,20 +185,21 @@ func (s *Signal) Offer(sdp webrtc.SessionDescription) {
 			},
 		},
 	)
-	s.signalLock.Unlock()
+	s.Unlock()
 	if err != nil {
 		log.Errorf("err=%v", err)
 	}
 }
 
 func (s *Signal) Answer(sdp webrtc.SessionDescription) {
+	log.Infof("[Signal.Answer] sdp=%v", sdp)
 	marshalled, err := json.Marshal(sdp)
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return
 	}
 
-	s.signalLock.Lock()
+	s.Lock()
 	err = s.stream.Send(
 		&pb.SignalRequest{
 			Payload: &pb.SignalRequest_Description{
@@ -228,12 +207,13 @@ func (s *Signal) Answer(sdp webrtc.SessionDescription) {
 			},
 		},
 	)
-	s.signalLock.Unlock()
+	s.Unlock()
 	if err != nil {
 		log.Errorf("err=%v", err)
 	}
 }
 
 func (s *Signal) Close() {
-
+	log.Infof("[Signal.Close]")
+	s.cancel()
 }
