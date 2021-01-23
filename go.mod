@@ -8,9 +8,7 @@ require (
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99 // indirect
 	github.com/pion/ice/v2 v2.0.14
 	github.com/pion/ion-log v1.0.0
-	github.com/pion/ion-sfu v1.6.5
-	github.com/pion/rtcp v1.2.6
-	github.com/pion/rtp v1.6.2
-	github.com/pion/webrtc/v3 v3.0.1
-	google.golang.org/grpc v1.34.0
+	github.com/pion/ion-sfu v1.7.8
+	github.com/pion/webrtc/v3 v3.0.4
+	google.golang.org/grpc v1.35.0
 )
