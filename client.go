@@ -34,6 +34,7 @@ type Client struct {
 	//export to user
 	OnTrack       func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver)
 	OnDataChannel func(*webrtc.DataChannel)
+	OnError       func(error)
 
 	producer *WebMProducer
 	recvByte int
@@ -61,6 +62,11 @@ func NewClient(addr string, cfg WebRTCTransportConfig) *Client {
 	c.signal.OnNegotiate = c.Negotiate
 	c.signal.OnTrickle = c.Trickle
 	c.signal.OnSetRemoteSDP = c.SetRemoteSDP
+	c.signal.OnError = func(err error) {
+		if c.OnError != nil {
+			c.OnError(err)
+		}
+	}
 
 	// this will be called when pub add/remove/replace track, but pion never triger, why?
 	// c.pub.pc.OnNegotiationNeeded(c.OnNegotiationNeeded)
