@@ -114,27 +114,29 @@ func (c *Client) Join(sid string) error {
 		c.remoteStreamId[track.StreamID()] = track.StreamID()
 		log.Infof("c.remoteStreamId=%+v", c.remoteStreamId)
 		c.streamLock.Unlock()
-		for {
-			select {
-			case <-c.notify:
-				return
-			default:
-				pkt, _, err := track.ReadRTP()
-				if err != nil {
-					if err == io.EOF {
-						log.Errorf("track.ReadRTP err=%v", err)
-						return
+		// user define
+		if c.OnTrack != nil {
+			c.OnTrack(track, receiver)
+		} else {
+			//for read and calc
+			for {
+				select {
+				case <-c.notify:
+					return
+				default:
+					pkt, _, err := track.ReadRTP()
+					if err != nil {
+						if err == io.EOF {
+							log.Errorf("track.ReadRTP err=%v", err)
+							return
+						}
+						log.Errorf("Error reading track rtp %s", err)
+						continue
 					}
-					log.Errorf("Error reading track rtp %s", err)
-					continue
+					c.recvByte += len(pkt.Raw)
 				}
-				c.recvByte += len(pkt.Raw)
 			}
 		}
-		// user define
-		// if c.OnTrack != nil {
-		// c.OnTrack(track, receiver)
-		// }
 	})
 
 	c.sub.pc.OnDataChannel(func(dc *webrtc.DataChannel) {
