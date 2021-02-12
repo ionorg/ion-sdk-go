@@ -26,6 +26,7 @@ type Call struct {
 
 // Client a sdk client
 type Client struct {
+	ID     string
 	pub    *Transport
 	sub    *Transport
 	cfg    WebRTCTransportConfig
@@ -49,8 +50,9 @@ type Client struct {
 }
 
 // NewClient create a sdk client
-func NewClient(addr string, cfg WebRTCTransportConfig) *Client {
+func NewClient(addr, id string, cfg WebRTCTransportConfig) *Client {
 	c := &Client{
+		ID:             id,
 		signal:         NewSignal(addr),
 		cfg:            cfg,
 		notify:         make(chan struct{}),
@@ -178,7 +180,7 @@ func (c *Client) Join(sid string) error {
 	if err != nil {
 		return err
 	}
-	err = c.signal.Join(sid, offer)
+	err = c.signal.Join(sid, c.ID, offer)
 	return err
 }
 

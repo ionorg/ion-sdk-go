@@ -44,7 +44,7 @@ func (e *Engine) AddClient(addr, sid, cid string) *Client {
 	if e.clients[sid] == nil {
 		e.clients[sid] = make(map[string]*Client)
 	}
-	c := NewClient(addr, e.cfg.WebRTC)
+	c := NewClient(addr, cid, e.cfg.WebRTC)
 	e.clients[sid][cid] = c
 	e.Unlock()
 	if c == nil {
