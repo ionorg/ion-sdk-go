@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"strings"
 
 	log "github.com/pion/ion-log"
@@ -12,19 +13,30 @@ import (
 	"github.com/pion/webrtc/v3/pkg/media/oggwriter"
 )
 
-func saveToDisk(i media.Writer, track *webrtc.TrackRemote) {
-	defer func() {
-		if err := i.Close(); err != nil {
-			panic(err)
-		}
-	}()
+func saveToDisk(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+	codec := track.Codec()
+	var fileWriter media.Writer
+	var err error
+	if strings.EqualFold(codec.MimeType, webrtc.MimeTypeOpus) {
+		log.Infof("Got Opus track, saving to disk as ogg (48 kHz, 2 channels)")
+		fileWriter, err = oggwriter.New(fmt.Sprintf("%d_%d.ogg", codec.PayloadType, track.SSRC()), 48000, 2)
+	} else if strings.EqualFold(codec.MimeType, webrtc.MimeTypeVP8) {
+		log.Infof("Got VP8 track, saving to disk as ivf")
+		fileWriter, err = ivfwriter.New(fmt.Sprintf("%d_%d.ivf", codec.PayloadType, track.SSRC()))
+	}
+
+	if err != nil {
+		log.Errorf("err=%v", err)
+		fileWriter.Close()
+		return
+	}
 
 	for {
 		rtpPacket, _, err := track.ReadRTP()
 		if err != nil {
 			panic(err)
 		}
-		if err := i.WriteRTP(rtpPacket); err != nil {
+		if err := fileWriter.WriteRTP(rtpPacket); err != nil {
 			panic(err)
 		}
 	}
@@ -40,7 +52,7 @@ func main() {
 	var session, addr, file string
 	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
 	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test", "join session name")
+	flag.StringVar(&session, "session", "test room", "join session name")
 	flag.Parse()
 
 	// add stun servers
@@ -67,34 +79,20 @@ func main() {
 	c := e.AddClient(addr, session, "client id")
 
 	// subscribe rtp from sessoin
-	oggFile, err := oggwriter.New("output.ogg", 48000, 2)
-	if err != nil {
-		panic(err)
-	}
-	ivfFile, err := ivfwriter.New("output.ivf")
-	if err != nil {
-		panic(err)
-	}
-	c.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		codec := track.Codec()
-		if strings.EqualFold(codec.MimeType, webrtc.MimeTypeOpus) {
-			log.Infof("Got Opus track, saving to disk as output.opus (48 kHz, 2 channels)")
-			saveToDisk(oggFile, track)
-		} else if strings.EqualFold(codec.MimeType, webrtc.MimeTypeVP8) {
-			log.Infof("Got VP8 track, saving to disk as output.ivf")
-			saveToDisk(ivfFile, track)
-		}
-	}
+	// comment this if you don't need save to file
+	c.OnTrack = saveToDisk
 
 	// client join a session
-	err = c.Join(session)
+	err := c.Join(session)
 
 	// publish file to session if needed
-	if err != nil && file != "" {
+	if err == nil && file != "" {
 		err = c.PublishWebm(file)
 		if err != nil {
 			log.Errorf("err=%v", err)
 		}
+	} else {
+		log.Errorf("err=%v", err)
 	}
 	select {}
 }
