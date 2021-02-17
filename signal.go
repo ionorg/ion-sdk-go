@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"sync"
+	"time"
 
 	log "github.com/pion/ion-log"
 	pb "github.com/pion/ion-sfu/cmd/signal/grpc/proto"
@@ -16,6 +17,7 @@ import (
 
 // Signal is a wrapper of grpc
 type Signal struct {
+	id     string
 	client pb.SFUClient
 	stream pb.SFU_SignalClient
 
@@ -31,15 +33,18 @@ type Signal struct {
 }
 
 // NewSignal create a grpc signaler
-func NewSignal(addr string) *Signal {
+func NewSignal(addr, id string) *Signal {
 	s := &Signal{}
-	log.Infof("Connecting to sfu: %s", addr)
+	s.id = id
 	// Set up a connection to the sfu server.
-	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure())
 	if err != nil {
-		log.Errorf("did not connect: %v", err)
+		log.Errorf("[%v] Connecting to sfu:%s failed: %v", s.id, addr, err)
 		return nil
 	}
+	log.Infof("[%v] Connecting to sfu ok: %s", s.id, addr)
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.client = pb.NewSFUClient(conn)
@@ -67,9 +72,9 @@ func (s *Signal) onSignalHandle() error {
 		res, err := s.stream.Recv()
 		if err != nil {
 			if err == io.EOF {
-				log.Infof("WebRTC Transport Closed")
+				log.Infof("[%v] WebRTC Transport Closed", s.id)
 				if err := s.stream.CloseSend(); err != nil {
-					log.Errorf("error sending close: %s", err)
+					log.Errorf("[%v] error sending close: %s", s.id, err)
 				}
 				return err
 			}
@@ -77,55 +82,55 @@ func (s *Signal) onSignalHandle() error {
 			errStatus, _ := status.FromError(err)
 			if errStatus.Code() == codes.Canceled {
 				if err := s.stream.CloseSend(); err != nil {
-					log.Errorf("error sending close: %s", err)
+					log.Errorf("[%v] error sending close: %s", s.id, err)
 				}
 				return err
 			}
 
-			log.Errorf("Error receiving signal response: %v", err)
+			log.Errorf("[%v] Error receiving signal response: %v", s.id, err)
 			return err
 		}
 
 		switch payload := res.Payload.(type) {
 		case *pb.SignalReply_Join:
 			// Set the remote SessionDescription
-			log.Infof("[join] got answer: %s", payload.Join.Description)
+			log.Infof("[%v] [join] got answer: %s", s.id, payload.Join.Description)
 
 			var sdp webrtc.SessionDescription
 			err := json.Unmarshal(payload.Join.Description, &sdp)
 			if err != nil {
-				log.Errorf("[join] sdp unmarshal error: %v", err)
+				log.Errorf("[%v] [join] sdp unmarshal error: %v", s.id, err)
 				return err
 			}
 
 			if err = s.OnSetRemoteSDP(sdp); err != nil {
-				log.Errorf("[join] s.OnSetRemoteSDP error %s", err)
+				log.Errorf("[%v] [join] s.OnSetRemoteSDP error %s", s.id, err)
 				return err
 			}
 		case *pb.SignalReply_Description:
 			var sdp webrtc.SessionDescription
 			err := json.Unmarshal(payload.Description, &sdp)
 			if err != nil {
-				log.Errorf("[description] sdp unmarshal error: %v", err)
+				log.Errorf("[%v] [description] sdp unmarshal error: %v", s.id, err)
 				return err
 			}
 			if sdp.Type == webrtc.SDPTypeOffer {
-				log.Infof("[description] got offer call s.OnNegotiate sdp=%+v", sdp)
+				log.Infof("[%v] [description] got offer call s.OnNegotiate sdp=%+v", s.id, sdp)
 				err := s.OnNegotiate(sdp)
 				if err != nil {
 					log.Errorf("err=%v", err)
 				}
 			} else if sdp.Type == webrtc.SDPTypeAnswer {
-				log.Infof("[description] got answer call s.OnSetRemoteSDP sdp=%+v", sdp)
+				log.Infof("[%v] [description] got answer call s.OnSetRemoteSDP sdp=%+v", s.id, sdp)
 				err = s.OnSetRemoteSDP(sdp)
 				if err != nil {
-					log.Errorf("[description] s.OnSetRemoteSDP err=%s", err)
+					log.Errorf("[%v] [description] s.OnSetRemoteSDP err=%s", s.id, err)
 				}
 			}
 		case *pb.SignalReply_Trickle:
 			var candidate webrtc.ICECandidateInit
 			_ = json.Unmarshal([]byte(payload.Trickle.Init), &candidate)
-			log.Infof("[trickle] type=%v candidate=%v", payload.Trickle.Target, candidate)
+			log.Infof("[%v] [trickle] type=%v candidate=%v", s.id, payload.Trickle.Target, candidate)
 			s.OnTrickle(candidate, int(payload.Trickle.Target))
 		default:
 			// log.Errorf("Unknow signal type!!!!%v", payload)
@@ -134,7 +139,7 @@ func (s *Signal) onSignalHandle() error {
 }
 
 func (s *Signal) Join(sid, uid string, offer webrtc.SessionDescription) error {
-	log.Infof("[Signal.Join] sid=%v uid=%v, offer=%v", sid, uid, offer)
+	log.Infof("[%v] [Signal.Join] sid=%v uid=%v, offer=%v", s.id, sid, uid, offer)
 	marshalled, err := json.Marshal(offer)
 	if err != nil {
 		return err
@@ -154,13 +159,13 @@ func (s *Signal) Join(sid, uid string, offer webrtc.SessionDescription) error {
 	)
 	s.Unlock()
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("[%v] err=%v", s.id, err)
 	}
 	return err
 }
 
 func (s *Signal) Trickle(candidate *webrtc.ICECandidate, target int) {
-	log.Infof("[Signal.Trickle] candidate=%v target=%v", candidate, target)
+	log.Infof("[%v] [Signal.Trickle] candidate=%v target=%v", s.id, candidate, target)
 	bytes, err := json.Marshal(candidate.ToJSON())
 	if err != nil {
 		log.Errorf("err=%v", err)
@@ -178,15 +183,15 @@ func (s *Signal) Trickle(candidate *webrtc.ICECandidate, target int) {
 	})
 	s.Unlock()
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("[%v] err=%v", s.id, err)
 	}
 }
 
 func (s *Signal) Offer(sdp webrtc.SessionDescription) {
-	log.Infof("[Signal.Offer] sdp=%v", sdp)
+	log.Infof("[%v] [Signal.Offer] sdp=%v", s.id, sdp)
 	marshalled, err := json.Marshal(sdp)
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("[%v] err=%v", s.id, err)
 		return
 	}
 	go s.onSignalHandleOnce()
@@ -200,12 +205,12 @@ func (s *Signal) Offer(sdp webrtc.SessionDescription) {
 	)
 	s.Unlock()
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("[%v] err=%v", s.id, err)
 	}
 }
 
 func (s *Signal) Answer(sdp webrtc.SessionDescription) {
-	log.Infof("[Signal.Answer] sdp=%v", sdp)
+	log.Infof("[%v] [Signal.Answer] sdp=%v", s.id, sdp)
 	marshalled, err := json.Marshal(sdp)
 	if err != nil {
 		log.Errorf("err=%v", err)
@@ -221,12 +226,12 @@ func (s *Signal) Answer(sdp webrtc.SessionDescription) {
 	)
 	s.Unlock()
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("[%v] err=%v", s.id, err)
 	}
 }
 
 func (s *Signal) Close() {
-	log.Infof("[Signal.Close]")
+	log.Infof("[%v] [Signal.Close]", s.id)
 	s.cancel()
 	go s.onSignalHandleOnce()
 }
