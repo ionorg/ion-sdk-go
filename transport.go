@@ -19,17 +19,22 @@ type Transport struct {
 
 // NewTransport create a transport
 func NewTransport(role int, signal *Signal, cfg WebRTCTransportConfig) *Transport {
-	var err error
 	t := &Transport{
 		role:   role,
 		signal: signal,
 		config: cfg,
 	}
 
-	me := &webrtc.MediaEngine{}
-	_ = me.RegisterDefaultCodecs()
+	var err error
+	var api *webrtc.API
+	var me *webrtc.MediaEngine
 	cfg.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(cfg.Setting))
+	if role == PUBLISHER {
+		me, err = getPublisherMediaEngine(cfg.VideoMime)
+	} else {
+		me, err = getSubscriberMediaEngine()
+	}
+	api = webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(cfg.Setting))
 	t.pc, err = api.NewPeerConnection(cfg.Configuration)
 
 	if err != nil {

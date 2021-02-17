@@ -17,13 +17,13 @@ type Engine struct {
 }
 
 // NewEngine create a engine
-func NewEngine(addr string, cfg Config) *Engine {
+func NewEngine(cfg Config) *Engine {
 	e := &Engine{
 		clients: make(map[string]map[string]*Client),
 	}
 	e.cfg = cfg
 
-	fixByFile := []string{"asm_amd64.s", "proc.go", "icegatherer.go"}
+	fixByFile := []string{"asm_amd64.s", "proc.go", "icegatherer.go", "client.go", "signal.go"}
 	fixByFunc := []string{}
 
 	log.Init(cfg.Log.Level, fixByFile, fixByFunc)

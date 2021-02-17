@@ -14,6 +14,7 @@ type Config struct {
 
 // WebRTCTransportConfig represents configuration options
 type WebRTCTransportConfig struct {
+	VideoMime     string
 	Configuration webrtc.Configuration
 	Setting       webrtc.SettingEngine
 }

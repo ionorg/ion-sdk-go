@@ -34,10 +34,11 @@ type WebMProducer struct {
 	videoCodec    string
 	file          *os.File
 	sendByte      int
+	id            string
 }
 
 // NewWebMProducer new a WebMProducer
-func NewWebMProducer(name string, offset int) *WebMProducer {
+func NewWebMProducer(id, name string, offset int) *WebMProducer {
 	r, err := os.Open(name)
 	if err != nil {
 		log.Errorf("unable to open file %s", name)
@@ -51,6 +52,7 @@ func NewWebMProducer(name string, offset int) *WebMProducer {
 	}
 
 	p := &WebMProducer{
+		id:            id,
 		name:          name,
 		offsetSeconds: offset,
 		reader:        reader,
@@ -234,9 +236,9 @@ func (t *WebMProducer) readLoop() {
 
 			// Send samples
 			if ivfErr := track.track.WriteSample(media.Sample{Data: pck.Data, Duration: time.Millisecond * 20}); ivfErr != nil {
-				log.Infof("Track write error=%v", ivfErr)
+				log.Errorf("Track write error=%v", ivfErr)
 			} else {
-				// log.Infof("mime=%v kind=%v streamid=%v len=%v", track.track.Codec().MimeType, track.track.Kind(), track.track.StreamID(), len(pck.Data))
+				log.Tracef("id=%v mime=%v kind=%v streamid=%v len=%v", t.id, track.track.Codec().MimeType, track.track.Kind(), track.track.StreamID(), len(pck.Data))
 				t.sendByte += len(pck.Data)
 			}
 		}
