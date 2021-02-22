@@ -73,7 +73,7 @@ func main() {
 		},
 	}
 	// new sdk engine
-	e := sdk.NewEngine(addr, config)
+	e := sdk.NewEngine(config)
 
 	// get a client from engine
 	c := e.AddClient(addr, session, "client id")
