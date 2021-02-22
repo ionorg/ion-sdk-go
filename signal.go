@@ -51,6 +51,7 @@ func NewSignal(addr, id string) *Signal {
 	s.stream, err = s.client.Signal(s.ctx)
 	if err != nil {
 		log.Errorf("err=%v", err)
+		return nil
 	}
 	return s
 }

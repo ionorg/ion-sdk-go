@@ -10,7 +10,7 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle int) {
+func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle int, video, audio bool) {
 	log.Infof("run session=%v file=%v role=%v total=%v duration=%v cycle=%v\n", session, file, role, total, duration, cycle)
 	timer := time.NewTimer(time.Duration(duration) * time.Second)
 
@@ -26,7 +26,7 @@ func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle
 				break
 			}
 			c.Join(session)
-			c.PublishWebm(file)
+			c.PublishWebm(file, video, audio)
 		case "sub":
 			cid := fmt.Sprintf("%s_sub_%d", session, i)
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
@@ -59,7 +59,7 @@ func main() {
 	var total, cycle, duration int
 	var role string
 	var loglevel string
-	// var video, audio bool
+	var video, audio bool
 
 	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
 	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
@@ -69,8 +69,8 @@ func main() {
 	flag.IntVar(&duration, "duration", 3600, "Running duration in sencond")
 	flag.StringVar(&role, "role", "pubsub", "Run as pubsub/sub")
 	flag.StringVar(&loglevel, "log", "info", "Log level")
-	// flag.BoolVar(&video, "video", true, "Publish video stream from webm file")
-	// flag.BoolVar(&audio, "audio", true, "Publish audio stream from webm file")
+	flag.BoolVar(&video, "v", false, "Publish video stream from webm file")
+	flag.BoolVar(&audio, "a", false, "Publish audio stream from webm file")
 	flag.Parse()
 	log.Init(loglevel, fixByFile, fixByFunc)
 
@@ -94,5 +94,5 @@ func main() {
 		},
 	}
 	e := sdk.NewEngine(config)
-	run(e, addr, session, file, role, total, duration, cycle)
+	run(e, addr, session, file, role, total, duration, cycle, video, audio)
 }

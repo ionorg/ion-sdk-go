@@ -41,20 +41,19 @@ func (e *Engine) AddClient(addr, sid, cid string) *Client {
 	}
 
 	e.Lock()
+	defer e.Unlock()
 	if e.clients[sid] == nil {
 		e.clients[sid] = make(map[string]*Client)
 	}
 	c := NewClient(addr, cid, e.cfg.WebRTC)
+	if c == nil {
+		return nil
+	}
 	e.clients[sid][cid] = c
-	e.Unlock()
 	if c == nil {
 		log.Errorf("c==nil")
 		return nil
 	}
-	// err := c.Join(sid)
-	// if err != nil {
-	// log.Errorf("err=%v", err)
-	// }
 	return c
 }
 
@@ -96,6 +95,9 @@ func (e *Engine) Stats(cycle int) string {
 		totalRecvBW, totalSendBW := 0, 0
 		for _, m := range e.clients {
 			for _, c := range m {
+				if c == nil {
+					continue
+				}
 				recvBW, sendBW := c.getBandWidth(cycle)
 				totalRecvBW += recvBW
 				totalSendBW += sendBW
