@@ -51,9 +51,13 @@ type Client struct {
 
 // NewClient create a sdk client
 func NewClient(addr, id string, cfg WebRTCTransportConfig) *Client {
+	s := NewSignal(addr, id)
+	if s == nil {
+		return nil
+	}
 	c := &Client{
 		ID:             id,
-		signal:         NewSignal(addr, id),
+		signal:         s,
 		cfg:            cfg,
 		notify:         make(chan struct{}),
 		remoteStreamId: make(map[string]string),
@@ -385,7 +389,7 @@ func (c *Client) SubscribeAll(video string, audio bool) {
 }
 
 // PublishWebm publish a webm producer
-func (c *Client) PublishWebm(file string) error {
+func (c *Client) PublishWebm(file string, video, audio bool) error {
 	ext := filepath.Ext(file)
 	switch ext {
 	case ".webm":
@@ -393,18 +397,22 @@ func (c *Client) PublishWebm(file string) error {
 	default:
 		return errInvalidFile
 	}
-	_, err := c.producer.AddTrack(c.pub.pc, "video")
-	if err != nil {
-		log.Debugf("err=%v", err)
-		return err
+	if video {
+		_, err := c.producer.AddTrack(c.pub.pc, "video")
+		if err != nil {
+			log.Debugf("err=%v", err)
+			return err
+		}
 	}
-	_, err = c.producer.AddTrack(c.pub.pc, "audio")
-	if err != nil {
-		log.Debugf("err=%v", err)
-		return err
+	if audio {
+		_, err := c.producer.AddTrack(c.pub.pc, "audio")
+		if err != nil {
+			log.Debugf("err=%v", err)
+			return err
+		}
 	}
 	c.producer.Start()
-	//occur by hand
+	//trigger by hand
 	c.OnNegotiationNeeded()
 	return nil
 }
