@@ -427,3 +427,17 @@ func (c *Client) getBandWidth(cycle int) (int, int) {
 	c.recvByte = 0
 	return recvBW, sendBW
 }
+
+func (c *Client) Simulcast(layer string) {
+	if layer == "" {
+		return
+	}
+	c.streamLock.RLock()
+	m := c.remoteStreamId
+	log.Infof("Simulcast: streams=%v", m)
+	c.streamLock.RUnlock()
+	for streamId := range m {
+		log.Debugf("id=%v simulcast remote streamid=%v", c.ID, streamId)
+		c.selectRemote(streamId, layer, true)
+	}
+}
