@@ -10,8 +10,8 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle int, video, audio bool) {
-	log.Infof("run session=%v file=%v role=%v total=%v duration=%v cycle=%v\n", session, file, role, total, duration, cycle)
+func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle int, video, audio bool, simulcast string) {
+	log.Infof("run session=%v file=%v role=%v total=%v duration=%v cycle=%v video=%v audio=%v simulcast=%v\n", session, file, role, total, duration, cycle, audio, video, simulcast)
 	timer := time.NewTimer(time.Duration(duration) * time.Second)
 
 	go e.Stats(3)
@@ -27,6 +27,7 @@ func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle
 			}
 			c.Join(session)
 			c.PublishWebm(file, video, audio)
+			c.Simulcast(simulcast)
 		case "sub":
 			cid := fmt.Sprintf("%s_sub_%d", session, i)
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
@@ -36,6 +37,7 @@ func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle
 				break
 			}
 			c.Join(session)
+			c.Simulcast(simulcast)
 		default:
 			log.Errorf("invalid role! should be pubsub/sub")
 		}
@@ -60,6 +62,7 @@ func main() {
 	var role string
 	var loglevel string
 	var video, audio bool
+	var simulcast string
 
 	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
 	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
@@ -71,6 +74,7 @@ func main() {
 	flag.StringVar(&loglevel, "log", "info", "Log level")
 	flag.BoolVar(&video, "v", false, "Publish video stream from webm file")
 	flag.BoolVar(&audio, "a", false, "Publish audio stream from webm file")
+	flag.StringVar(&simulcast, "simulcast", "", "simulcast layer q|h|f")
 	flag.Parse()
 	log.Init(loglevel, fixByFile, fixByFunc)
 
@@ -94,5 +98,5 @@ func main() {
 		},
 	}
 	e := sdk.NewEngine(config)
-	run(e, addr, session, file, role, total, duration, cycle, video, audio)
+	run(e, addr, session, file, role, total, duration, cycle, video, audio, simulcast)
 }
