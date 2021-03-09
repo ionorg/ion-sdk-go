@@ -68,7 +68,11 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	go func() {
 		ticker := time.NewTicker(time.Second * 2)
 		for range ticker.C {
-			/*if rtcpErr := peerConnection.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}}); rtcpErr != nil {
+			/*
+				// We need to add direct access to the peerconnection to ion-sdk-go to support PLI here
+				// PLI is disabled in this example currently
+
+				if rtcpErr := peerConnection.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}}); rtcpErr != nil {
 				fmt.Println(rtcpErr)
 			}*/
 		}
@@ -96,15 +100,6 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 
 		// Write
 		if _, err = c.conn.Write(b[:n]); err != nil {
-			// For this particular example, third party applications usually timeout after a short
-			// amount of time during which the user doesn't have enough time to provide the answer
-			// to the browser.
-			// That's why, for this particular example, the user first needs to provide the answer
-			// to the browser then open the third party application. Therefore we must not kill
-			// the forward on "connection refused" errors
-			if opError, ok := err.(*net.OpError); ok && opError.Err.Error() == "write: connection refused" {
-				continue
-			}
 			panic(err)
 		}
 	}
