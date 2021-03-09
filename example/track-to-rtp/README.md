@@ -25,5 +25,5 @@ broadcast to RTMP:
 # set your STREAM_KEY and RTMP_URL
 export RTMP_URL=rtmp://live.twitch.tv/app/$STREAM_KEY
 
-ffmpeg -protocol_whitelist file,udp,rtp -i rtp-forwarder.sdp -c:v libx264 -preset veryfast -b:v 3000k -maxrate 3000k -bufsize 6000k -pix_fmt yuv420p -g 50 -c:a aac -b:a 160k -ac 2 -ar 44100 -f flv $RTMP_URL
+ffmpeg -protocol_whitelist file,udp,rtp -i subscribe.sdp -c:v libx264 -preset veryfast -b:v 3000k -maxrate 3000k -bufsize 6000k -pix_fmt yuv420p -g 50 -c:a aac -b:a 160k -ac 2 -ar 44100 -f flv $RTMP_URL
 ```
