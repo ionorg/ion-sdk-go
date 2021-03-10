@@ -1,6 +1,6 @@
-# Track to RTP (or FFMpeg, gstreamer, etc)
+# Track to gstreamer
 
-This example will take an audio and video track (ONLY TESTED WITH ONE) and replay it with RTP on local UDP ports 4000 (audio track) and 4002 (video)
+This example will take an audio and video track (ONLY TESTED WITH ONE) and send it to a gstreamer pipeline
 
 
 ## Quick Start
