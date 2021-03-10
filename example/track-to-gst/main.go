@@ -9,7 +9,7 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-var stream_key = "q5v6-4ybg-67hg-0esp"
+var stream_key = ""
 var rtmp_url = "rtmp://x.rtmp.youtube.com/live2" + "/"+stream_key
 
 var streams = map[string]gst.RemoteStream{}
