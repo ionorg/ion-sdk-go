@@ -70,3 +70,7 @@ func NewTransport(role int, signal *Signal, cfg WebRTCTransportConfig) *Transpor
 	})
 	return t
 }
+
+func (t *Transport) GetPeerConnection() *webrtc.PeerConnection {
+	return t.pc
+}
