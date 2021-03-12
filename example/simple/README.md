@@ -7,18 +7,17 @@ This is a simple example to show:
 
 ## Quick Start
 
-### 1 build
+### 1 run
 
 ```
-go build main.go
+# save all trakcs to disk
+go run main.go -addr "localhost:50051" -session "test session"
+
+# add -file to also play a file into the room (while saving tracks)
+go run main.go -addr "localhost:50051" -session "test session" -file playback.webm
+
 ```
 
-### 2 use
-
-```
-# see ./main --help
-./main -file /Volumes/vm/media/djrm480p.webm  -addr "localhost:8000" -session 'test room'
-```
 
 ### 3 tips
 
