@@ -2,8 +2,11 @@ package engine
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 	"time"
+
+	_ "net/http/pprof"
 
 	log "github.com/pion/ion-log"
 )
@@ -109,5 +112,14 @@ func (e *Engine) Stats(cycle int) string {
 		e.RUnlock()
 		log.Infof(info)
 		time.Sleep(time.Duration(cycle) * time.Second)
+	}
+}
+
+// ServePProf listening pprof
+func (e *Engine) ServePProf(paddr string) {
+	log.Infof("PProf Listening %v", paddr)
+	err := http.ListenAndServe(paddr, nil)
+	if err != nil {
+		log.Errorf("ServePProf error:%v", err)
 	}
 }

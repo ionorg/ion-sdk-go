@@ -125,12 +125,13 @@ func (c *Client) Join(sid string) error {
 			c.OnTrack(track, receiver)
 		} else {
 			//for read and calc
+			b := make([]byte, 1500)
 			for {
 				select {
 				case <-c.notify:
 					return
 				default:
-					pkt, _, err := track.ReadRTP()
+					n, _, err := track.Read(b)
 					if err != nil {
 						if err == io.EOF {
 							log.Errorf("id=%v track.ReadRTP err=%v", c.ID, err)
@@ -139,7 +140,7 @@ func (c *Client) Join(sid string) error {
 						log.Errorf("id=%v Error reading track rtp %s", c.ID, err)
 						continue
 					}
-					c.recvByte += len(pkt.Raw)
+					c.recvByte += n
 				}
 			}
 		}

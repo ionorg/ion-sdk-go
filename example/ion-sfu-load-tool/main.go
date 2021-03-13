@@ -56,16 +56,12 @@ func main() {
 	fixByFunc := []string{"AddProducer", "NewClient"}
 
 	//get args
-	var session string
-	var addr, file string
+	var session, gaddr, file, role, loglevel, simulcast, paddr string
 	var total, cycle, duration int
-	var role string
-	var loglevel string
 	var video, audio bool
-	var simulcast string
 
 	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
-	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
+	flag.StringVar(&gaddr, "gaddr", "", "Ion-sfu grpc addr")
 	flag.StringVar(&session, "session", "test", "join session name")
 	flag.IntVar(&total, "clients", 1, "Number of clients to start")
 	flag.IntVar(&cycle, "cycle", 1000, "Run new client cycle in ms")
@@ -75,6 +71,7 @@ func main() {
 	flag.BoolVar(&video, "v", false, "Publish video stream from webm file")
 	flag.BoolVar(&audio, "a", false, "Publish audio stream from webm file")
 	flag.StringVar(&simulcast, "simulcast", "", "simulcast layer q|h|f")
+	flag.StringVar(&paddr, "paddr", "", "pprof listening addr")
 	flag.Parse()
 	log.Init(loglevel, fixByFile, fixByFunc)
 
@@ -97,6 +94,13 @@ func main() {
 			Configuration: webrtcCfg,
 		},
 	}
+	if gaddr == "" {
+		log.Errorf("gaddr is \"\"!")
+		return
+	}
 	e := sdk.NewEngine(config)
-	run(e, addr, session, file, role, total, duration, cycle, video, audio, simulcast)
+	if paddr != "" {
+		go e.ServePProf(paddr)
+	}
+	run(e, gaddr, session, file, role, total, duration, cycle, video, audio, simulcast)
 }

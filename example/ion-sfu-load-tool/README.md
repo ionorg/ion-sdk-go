@@ -64,17 +64,17 @@ sysctl -w net.ipv4.tcp_syncookies=1
 #your command line here, make sure run it with sudo!
 # conference mode: 10v10
 # you only need one script
-./ion-load-tool -file ./djrm480p.webm -clients 10 -role pubsub -addr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
+./ion-sfu-load-tool -file ./djrm480p.webm -clients 10 -role pubsub -gaddr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
 
 
 
 # live mode: 1v10
 # you need to run two scripts
 # pub.sh
-#./ion-load-tool -file ./djrm480p.webm -clients 1 -role pubsub -addr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
+#./ion-sfu-load-tool -file ./djrm480p.webm -clients 1 -role pubsub -gaddr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
 
 # sub.sh
-#./ion-load-tool -file ./djrm480p.webm -clients 10 -role sub -addr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
+#./ion-sfu-load-tool -file ./djrm480p.webm -clients 10 -role sub -gaddr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
 ```
 
 
