@@ -50,9 +50,9 @@ func main() {
 
 	// parse flag
 	var session, addr, file string
-	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
+	flag.StringVar(&file, "file", "", "Path to the file media")
 	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test room", "join session name")
+	flag.StringVar(&session, "session", "test session", "join session name")
 	flag.Parse()
 
 	// add stun servers
