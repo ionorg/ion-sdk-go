@@ -199,6 +199,14 @@ func (c *Client) GetSubStats() webrtc.StatsReport {
 	return c.sub.pc.GetStats()
 }
 
+func (c *Client) GetPubTransport() *Transport {
+	return c.pub
+}
+
+func (c *Client) GetSubTransport() *Transport {
+	return c.sub
+}
+
 // Publish a local track
 func (c *Client) Publish(track webrtc.TrackLocal) (*webrtc.RTPTransceiver, error) {
 	t, err := c.pub.pc.AddTransceiverFromTrack(track, webrtc.RTPTransceiverInit{
