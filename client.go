@@ -185,7 +185,7 @@ func (c *Client) Join(sid string) error {
 	if err != nil {
 		return err
 	}
-	err = c.signal.Join(sid, offer)
+	err = c.signal.Join(sid, c.ID, offer)
 	return err
 }
 

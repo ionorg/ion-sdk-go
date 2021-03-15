@@ -139,7 +139,7 @@ func (s *Signal) onSignalHandle() error {
 	}
 }
 
-func (s *Signal) Join(sid string, offer webrtc.SessionDescription) error {
+func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription) error {
 	log.Infof("[%v] [Signal.Join] sid=%v offer=%v", s.id, sid, offer)
 	marshalled, err := json.Marshal(offer)
 	if err != nil {
@@ -152,6 +152,7 @@ func (s *Signal) Join(sid string, offer webrtc.SessionDescription) error {
 			Payload: &pb.SignalRequest_Join{
 				Join: &pb.JoinRequest{
 					Sid:         sid,
+					Uid:         uid,
 					Description: marshalled,
 				},
 			},
