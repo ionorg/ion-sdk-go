@@ -2,12 +2,12 @@ package main
 
 import (
 	"flag"
-	"net"
 	"fmt"
-	"time"
 	log "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/webrtc/v3"
+	"net"
+	"time"
 	//"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"os/exec"
@@ -22,7 +22,7 @@ type udpConn struct {
 func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	log.Infof("GOT TRACK", track, receiver)
 
-	track_sdp := "track-"+track.ID()+".sdp"
+	track_sdp := "track-" + track.ID() + ".sdp"
 
 	cmd := exec.Command("cat", track_sdp)
 	output, err := cmd.Output()
@@ -35,7 +35,7 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	if laddr, err = net.ResolveUDPAddr("udp", "127.0.0.1:"); err != nil {
 		panic(err)
 	}
-	
+
 	udpConns := map[string]*udpConn{
 		"audio": {port: 4000, payloadType: 111},
 		"video": {port: 4002, payloadType: 96},
@@ -100,6 +100,15 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 
 		// Write
 		if _, err = c.conn.Write(b[:n]); err != nil {
+			// For this particular example, third party applications usually timeout after a short
+			// amount of time during which the user doesn't have enough time to provide the answer
+			// to the browser.
+			// That's why, for this particular example, the user first needs to provide the answer
+			// to the browser then open the third party application. Therefore we must not kill
+			// the forward on "connection refused" errors
+			if opError, ok := err.(*net.OpError); ok && opError.Err.Error() == "write: connection refused" {
+				continue
+			}
 			panic(err)
 		}
 	}
