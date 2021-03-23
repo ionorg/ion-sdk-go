@@ -87,7 +87,7 @@ func main() {
 
 	// publish file to session if needed
 	if err == nil && file != "" {
-		err = c.PublishWebm(file)
+		err = c.PublishWebm(file, true, true)
 		if err != nil {
 			log.Errorf("err=%v", err)
 		}
