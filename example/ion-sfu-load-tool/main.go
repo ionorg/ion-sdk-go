@@ -20,9 +20,9 @@ func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle
 		case "pubsub":
 			cid := fmt.Sprintf("%s_pubsub_%d", session, i)
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
-			c := e.AddClient(addr, session, cid)
-			if c == nil {
-				log.Errorf("c==nil")
+			c, err := sdk.NewClient(e, addr, cid)
+			if err != nil {
+				log.Errorf("%v", err)
 				break
 			}
 			c.Join(session)
@@ -31,9 +31,9 @@ func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle
 		case "sub":
 			cid := fmt.Sprintf("%s_sub_%d", session, i)
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
-			c := e.AddClient(addr, session, cid)
-			if c == nil {
-				log.Errorf("c==nil")
+			c, err := sdk.NewClient(e, addr, cid)
+			if err != nil {
+				log.Errorf("%v", err)
 				break
 			}
 			c.Join(session)

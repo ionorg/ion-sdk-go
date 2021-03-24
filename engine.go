@@ -37,44 +37,34 @@ func NewEngine(cfg Config) *Engine {
 // addr: grpc addr
 // sid: session/room id
 // cid: client id
-func (e *Engine) AddClient(addr, sid, cid string) *Client {
-	if sid == "" || cid == "" {
-		log.Errorf("invalid id: sid=%v cid=%v", sid, cid)
-		return nil
-	}
-
+func (e *Engine) AddClient(c *Client) error {
 	e.Lock()
 	defer e.Unlock()
-	if e.clients[sid] == nil {
-		e.clients[sid] = make(map[string]*Client)
+	if e.clients[c.sid] == nil {
+		e.clients[c.sid] = make(map[string]*Client)
 	}
-	c := NewClient(addr, cid, e.cfg.WebRTC)
+
+	e.clients[c.sid][c.uid] = c
 	if c == nil {
-		return nil
+		err := fmt.Errorf("client is nil")
+		log.Errorf("%v", err)
+		return err
 	}
-	e.clients[sid][cid] = c
-	if c == nil {
-		log.Errorf("c==nil")
-		return nil
-	}
-	return c
+
+	return nil
 }
 
 // DelClient delete a client
-func (e *Engine) DelClient(sid, cid string) error {
-	if cid == "" {
-		return errInvalidClientID
-	}
-
+func (e *Engine) DelClient(c *Client) error {
 	e.Lock()
-	if e.clients[sid] == nil {
+	if e.clients[c.sid] == nil {
 		e.Unlock()
 		return errInvalidSessID
 	}
-	if c, ok := e.clients[sid][cid]; ok && (c != nil) {
+	if c, ok := e.clients[c.sid][c.uid]; ok && (c != nil) {
 		c.Close()
 	}
-	delete(e.clients[sid], cid)
+	delete(e.clients[c.sid], c.uid)
 	e.Unlock()
 	return nil
 }
