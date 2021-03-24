@@ -2,15 +2,18 @@ package main
 
 import (
 	"flag"
-	"net"
 	"fmt"
+	"net"
 	"time"
+
 	log "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/webrtc/v3"
+
 	//"github.com/pion/rtcp"
-	"github.com/pion/rtp"
 	"os/exec"
+
+	"github.com/pion/rtp"
 )
 
 type udpConn struct {
@@ -22,7 +25,7 @@ type udpConn struct {
 func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	log.Infof("GOT TRACK", track, receiver)
 
-	track_sdp := "track-"+track.ID()+".sdp"
+	track_sdp := "track-" + track.ID() + ".sdp"
 
 	cmd := exec.Command("cat", track_sdp)
 	output, err := cmd.Output()
@@ -35,7 +38,7 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	if laddr, err = net.ResolveUDPAddr("udp", "127.0.0.1:"); err != nil {
 		panic(err)
 	}
-	
+
 	udpConns := map[string]*udpConn{
 		"audio": {port: 4000, payloadType: 111},
 		"video": {port: 4002, payloadType: 96},
@@ -100,6 +103,15 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 
 		// Write
 		if _, err = c.conn.Write(b[:n]); err != nil {
+			// For this particular example, third party applications usually timeout after a short
+			// amount of time during which the user doesn't have enough time to provide the answer
+			// to the browser.
+			// That's why, for this particular example, the user first needs to provide the answer
+			// to the browser then open the third party application. Therefore we must not kill
+			// the forward on "connection refused" errors
+			if opError, ok := err.(*net.OpError); ok && opError.Err.Error() == "write: connection refused" {
+				continue
+			}
 			panic(err)
 		}
 	}
@@ -138,15 +150,19 @@ func main() {
 	// new sdk engine
 	e := sdk.NewEngine(config)
 
-	// get a client from engine
-	c := e.AddClient(addr, session, "client id")
+	// create a new client from engine
+	c, err := sdk.NewClient(e, addr, "client id")
+	if err != nil {
+		log.Errorf("err=%v", err)
+		return
+	}
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
 	c.OnTrack = trackToRTP
 
 	// client join a session
-	err := c.Join(session)
+	err = c.Join(session)
 
 	// publish file to session if needed
 	if err != nil {

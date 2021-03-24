@@ -12,8 +12,11 @@ const (
 	bizAddr = "127.0.0.1:5551"
 	sid     = "sid01"
 	uid     = "myuid"
-	info    = "{info...}"
-	msg     = "{}"
+)
+
+var (
+	info = map[string]interface{}{"name": "bizclient"}
+	msg  = map[string]interface{}{"text": "hello from go"}
 )
 
 var (
@@ -60,7 +63,7 @@ func init() {
 func TestBizJoin(t *testing.T) {
 
 	wg.Add(1)
-	err := bizcli.Join(sid, uid, []byte(info))
+	err := bizcli.Join(sid, uid, info)
 	if err != nil {
 		t.Error(err)
 	}
@@ -68,15 +71,15 @@ func TestBizJoin(t *testing.T) {
 }
 
 func TestBizMessageSend(t *testing.T) {
-	bizcli.OnMessage = func(from string, to string, data []byte) {
+	bizcli.OnMessage = func(from string, to string, data map[string]interface{}) {
 		log.Infof("OnMessage msg = %v", data)
 		assert.Equal(t, uid, from)
 		assert.Equal(t, uid, to)
-		assert.Equal(t, []byte(msg), data)
+		assert.Equal(t, msg, data)
 		wg.Done()
 	}
 	wg.Add(1)
-	err := bizcli.SendMessage(uid, uid, []byte(msg))
+	err := bizcli.SendMessage(uid, uid, msg)
 	if err != nil {
 		t.Error(err)
 	}

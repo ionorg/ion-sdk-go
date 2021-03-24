@@ -8,6 +8,7 @@ import (
 	log "github.com/pion/ion-log"
 	"github.com/pion/ion-sdk-go/pkg/grpc/biz"
 	"github.com/pion/ion-sdk-go/pkg/grpc/ion"
+	"github.com/square/go-jose/v3/json"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,7 +25,7 @@ type BizClient struct {
 	OnLeave       func(reason string)
 	OnPeerEvent   func(state PeerState, peer Peer)
 	OnStreamEvent func(state StreamState, sid string, uid string, streams []*Stream)
-	OnMessage     func(from string, to string, data []byte)
+	OnMessage     func(from string, to string, data map[string]interface{})
 	OnError       func(error)
 }
 
@@ -54,16 +55,22 @@ func (c *BizClient) Close() {
 	c.stream.CloseSend()
 }
 
-func (c *BizClient) Join(sid string, uid string, info []byte) error {
+func (c *BizClient) Join(sid string, uid string, info map[string]interface{}) error {
 	log.Infof("[Biz.Join] sid=%v uid=%v, info=%v", sid, uid, info)
-	err := c.stream.Send(
+	buf, err := json.Marshal(info)
+	if err != nil {
+		log.Errorf("Marshal join.info [%v] err=%v", sid, err)
+		c.OnError(err)
+		return err
+	}
+	err = c.stream.Send(
 		&biz.SignalRequest{
 			Payload: &biz.SignalRequest_Join{
 				Join: &biz.Join{
 					Peer: &ion.Peer{
 						Sid:  sid,
 						Uid:  uid,
-						Info: info,
+						Info: buf,
 					},
 				},
 			},
@@ -97,15 +104,21 @@ func (c *BizClient) Leave(uid string) error {
 	return nil
 }
 
-func (c *BizClient) SendMessage(from string, to string, data []byte) error {
+func (c *BizClient) SendMessage(from string, to string, data map[string]interface{}) error {
 	log.Infof("[Biz.SendMessage] from=%v, to=%v, data=%v", from, to, data)
-	err := c.stream.Send(
+	buf, err := json.Marshal(data)
+	if err != nil {
+		log.Errorf("Marshal msg.data [%v] err=%v", from, err)
+		c.OnError(err)
+		return err
+	}
+	err = c.stream.Send(
 		&biz.SignalRequest{
 			Payload: &biz.SignalRequest_Msg{
 				Msg: &ion.Message{
 					From: from,
 					To:   to,
-					Data: data,
+					Data: buf,
 				},
 			},
 		},
@@ -160,16 +173,37 @@ func (c *BizClient) bizSignalReadLoop() error {
 			}
 		case *biz.SignalReply_Msg:
 			msg := payload.Msg
+			data := make(map[string]interface{})
+
+			err := json.Unmarshal(msg.Data, &data)
+			if err != nil {
+				log.Errorf("Unmarshal peer.info: err %v", err)
+				c.OnError(err)
+				return err
+			}
+
 			if c.OnMessage != nil {
-				c.OnMessage(msg.From, msg.To, msg.Data)
+				c.OnMessage(msg.From, msg.To, data)
 			}
 		case *biz.SignalReply_PeerEvent:
 			event := payload.PeerEvent
+			info := make(map[string]interface{})
+
+			if event.State == ion.PeerEvent_JOIN ||
+				event.State == ion.PeerEvent_UPDATE {
+				err := json.Unmarshal(event.Peer.Info, &info)
+				if err != nil {
+					log.Errorf("Unmarshal peer.info: err %v", err)
+					c.OnError(err)
+					return err
+				}
+			}
+
 			if c.OnPeerEvent != nil {
 				c.OnPeerEvent(PeerState(event.State), Peer{
 					Sid:  event.Peer.Sid,
 					Uid:  event.Peer.Uid,
-					Info: event.Peer.Info,
+					Info: info,
 				})
 			}
 		case *biz.SignalReply_StreamEvent:

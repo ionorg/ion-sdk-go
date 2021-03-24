@@ -33,7 +33,7 @@ type Signal struct {
 }
 
 // NewSignal create a grpc signaler
-func NewSignal(addr, id string) *Signal {
+func NewSignal(addr, id string) (*Signal, error) {
 	s := &Signal{}
 	s.id = id
 	// Set up a connection to the sfu server.
@@ -42,7 +42,7 @@ func NewSignal(addr, id string) *Signal {
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure())
 	if err != nil {
 		log.Errorf("[%v] Connecting to sfu:%s failed: %v", s.id, addr, err)
-		return nil
+		return nil, err
 	}
 	log.Infof("[%v] Connecting to sfu ok: %s", s.id, addr)
 
@@ -51,9 +51,9 @@ func NewSignal(addr, id string) *Signal {
 	s.stream, err = s.client.Signal(s.ctx)
 	if err != nil {
 		log.Errorf("err=%v", err)
-		return nil
+		return nil, err
 	}
-	return s
+	return s, nil
 }
 
 func (s *Signal) onSignalHandleOnce() {

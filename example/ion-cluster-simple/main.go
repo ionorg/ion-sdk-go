@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lucsky/cuid"
 	log "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	gst "github.com/pion/ion-sdk-go/pkg/gstreamer-sink"
@@ -14,9 +15,9 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-const (
-	uid  = "biz-client-id"
-	info = `{}`
+var (
+	info = map[string]interface{}{"name": "bizclient"}
+	uid  = cuid.New()
 )
 
 func init() {
@@ -25,39 +26,55 @@ func init() {
 	runtime.LockOSThread()
 }
 
-func runClientLoop(addr, session string) {
+func main() {
+	fixByFile := []string{"asm_amd64.s", "proc.go"}
+	fixByFunc := []string{}
+	log.Init("debug", fixByFile, fixByFunc)
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
+	// parse flag
+	var session, addr string
+	flag.StringVar(&addr, "addr", "localhost:5551", "ion-cluster grpc addr")
+	flag.StringVar(&session, "session", "test room", "join session name")
+	flag.Parse()
+
+	connector := sdk.NewIonConnector(addr, uid, info)
+
+	connector.OnError = func(err error) {
+		log.Errorf("OnError %v", err)
 	}
 
-	config := sdk.Config{
-		Log: log.Config{
-			Level: "debug",
-		},
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
+	connector.OnJoin = func(success bool, reason string) {
+		log.Infof("OnJoin success = %v, reason = %v", success, reason)
 	}
-	// new sdk engine
-	e := sdk.NewEngine(config)
 
-	// get a client from engine
-	c := e.AddClient(addr, session, uid)
+	connector.OnLeave = func(reason string) {
+		log.Infof("OnLeave reason = %v", reason)
+	}
+
+	connector.OnPeerEvent = func(event sdk.PeerEvent) {
+		log.Infof("OnPeerEvent peer = %v, state = %v", event.Peer, event.State)
+	}
+
+	connector.OnStreamEvent = func(event sdk.StreamEvent) {
+		log.Infof("StreamEvent state = %v, sid = %v, uid = %v, streams = %v",
+			event.State,
+			event.Sid,
+			event.Uid,
+			event.Streams)
+	}
+
+	connector.OnMessage = func(msg sdk.Message) {
+		log.Infof("OnMessage from = %v, to = %v, msg = %v", msg.From, msg.To, msg.Data)
+	}
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
-	c.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+	connector.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
 		go func() {
 			ticker := time.NewTicker(time.Second * 3)
 			for range ticker.C {
-				rtcpSendErr := c.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
+				rtcpSendErr := connector.SFU().GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
 				if rtcpSendErr != nil {
 					fmt.Println(rtcpSendErr)
 				}
@@ -68,73 +85,20 @@ func runClientLoop(addr, session string) {
 		fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
 		pipeline := gst.CreatePipeline(strings.ToLower(codecName))
 		pipeline.Start()
+		defer pipeline.Stop()
 		buf := make([]byte, 1400)
 		for {
 			i, _, readErr := track.Read(buf)
 			if readErr != nil {
 				log.Errorf("%v", readErr)
+				return
 			}
 
 			pipeline.Push(buf[:i])
 		}
 	}
 
-	// client join a session
-	err := c.Join(session)
-
-	// publish file to session if needed
-	if err != nil {
-		log.Errorf("err=%v", err)
-	}
-
-	select {}
-}
-
-func main() {
-	fixByFile := []string{"asm_amd64.s", "proc.go"}
-	fixByFunc := []string{}
-	log.Init("debug", fixByFile, fixByFunc)
-
-	// parse flag
-	var session, addr string
-	flag.StringVar(&addr, "addr", "localhost:50051", "ion-cluster grpc addr")
-	flag.StringVar(&session, "session", "test room", "join session name")
-	flag.Parse()
-
-	bizcli := sdk.NewBizClient(addr)
-
-	bizcli.OnError = func(err error) {
-		log.Errorf("OnError %v", err)
-	}
-
-	bizcli.OnJoin = func(success bool, reason string) {
-		log.Infof("OnJoin success = %v, reason = %v", success, reason)
-		if success {
-			go runClientLoop(addr, session)
-		}
-	}
-
-	bizcli.OnLeave = func(reason string) {
-		log.Infof("OnLeave reason = %v", reason)
-	}
-
-	bizcli.OnPeerEvent = func(state sdk.PeerState, peer sdk.Peer) {
-		log.Infof("OnPeerEvent peer = %v, state = %v", peer, state)
-	}
-
-	bizcli.OnStreamEvent = func(state sdk.StreamState, sid string, uid string, streams []*sdk.Stream) {
-		log.Infof("StreamEvent state = %v, sid = %v, uid = %v, streams = %v",
-			state,
-			sid,
-			uid,
-			streams)
-	}
-
-	bizcli.OnMessage = func(from string, to string, data []byte) {
-		log.Infof("OnMessage from = %v, to = %v, msg = %v", from, to, data)
-	}
-
-	err := bizcli.Join(session, uid, []byte(info))
+	err := connector.Join(session)
 	if err != nil {
 		log.Errorf("join err %v", err)
 	}

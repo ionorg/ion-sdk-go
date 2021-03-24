@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucsky/cuid"
 	log "github.com/pion/ion-log"
 	"github.com/pion/webrtc/v3"
 )
@@ -26,7 +27,8 @@ type Call struct {
 
 // Client a sdk client
 type Client struct {
-	ID     string
+	uid    string
+	sid    string
 	pub    *Transport
 	sub    *Transport
 	cfg    WebRTCTransportConfig
@@ -47,18 +49,26 @@ type Client struct {
 
 	//cache datachannel api operation before dc.OnOpen
 	apiQueue []Call
+
+	engine *Engine
 }
 
 // NewClient create a sdk client
-func NewClient(addr, id string, cfg WebRTCTransportConfig) *Client {
-	s := NewSignal(addr, id)
-	if s == nil {
-		return nil
+func NewClient(engine *Engine, addr string, cid string) (*Client, error) {
+	uid := cid
+	if uid == "" {
+		uid = cuid.New()
+	}
+
+	s, err := NewSignal(addr, uid)
+	if err != nil {
+		return nil, err
 	}
 	c := &Client{
-		ID:             id,
+		engine:         engine,
+		uid:            uid,
 		signal:         s,
-		cfg:            cfg,
+		cfg:            engine.cfg.WebRTC,
 		notify:         make(chan struct{}),
 		remoteStreamId: make(map[string]string),
 	}
@@ -75,26 +85,28 @@ func NewClient(addr, id string, cfg WebRTCTransportConfig) *Client {
 	c.pub = NewTransport(PUBLISHER, c.signal, c.cfg)
 	c.sub = NewTransport(SUBSCRIBER, c.signal, c.cfg)
 
+	engine.AddClient(c)
+
 	// this will be called when pub add/remove/replace track, but pion never triger, why?
 	// c.pub.pc.OnNegotiationNeeded(c.OnNegotiationNeeded)
-	return c
+	return c, nil
 }
 
 // SetRemoteSDP pub SetRemoteDescription and send cadidate to sfu
 func (c *Client) SetRemoteSDP(sdp webrtc.SessionDescription) error {
 	err := c.pub.pc.SetRemoteDescription(sdp)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.ID, err)
+		log.Errorf("id=%v err=%v", c.uid, err)
 		return err
 	}
 
 	// it's safe to add cand now after SetRemoteDescription
 	if len(c.pub.RecvCandidates) > 0 {
 		for _, candidate := range c.pub.RecvCandidates {
-			log.Debugf("id=%v c.pub.pc.AddICECandidate candidate=%v", c.ID, candidate)
+			log.Debugf("id=%v c.pub.pc.AddICECandidate candidate=%v", c.uid, candidate)
 			err = c.pub.pc.AddICECandidate(candidate)
 			if err != nil {
-				log.Errorf("id=%v c.pub.pc.AddICECandidate err=%v", c.ID, err)
+				log.Errorf("id=%v c.pub.pc.AddICECandidate err=%v", c.uid, err)
 			}
 		}
 		c.pub.RecvCandidates = []webrtc.ICECandidateInit{}
@@ -103,7 +115,7 @@ func (c *Client) SetRemoteSDP(sdp webrtc.SessionDescription) error {
 	// it's safe to send cand now after join ok
 	if len(c.pub.SendCandidates) > 0 {
 		for _, cand := range c.pub.SendCandidates {
-			log.Debugf("id=%v sending c.pub.SendCandidates cand=%v", c.ID, cand)
+			log.Debugf("id=%v sending c.pub.SendCandidates cand=%v", c.uid, cand)
 			c.signal.Trickle(cand, PUBLISHER)
 		}
 		c.pub.SendCandidates = []*webrtc.ICECandidate{}
@@ -113,12 +125,12 @@ func (c *Client) SetRemoteSDP(sdp webrtc.SessionDescription) error {
 
 // Join client join a session
 func (c *Client) Join(sid string) error {
-	log.Debugf("[Client.Join] sid=%v id=%v", sid, c.ID)
+	log.Debugf("[Client.Join] sid=%v uid=%v", sid, c.uid)
 	c.sub.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		log.Debugf("[c.sub.pc.OnTrack] got track streamId=%v kind=%v ssrc=%v ", track.StreamID(), track.Kind(), track.SSRC())
 		c.streamLock.Lock()
 		c.remoteStreamId[track.StreamID()] = track.StreamID()
-		log.Debugf("id=%v len(c.remoteStreamId)=%+v", c.ID, len(c.remoteStreamId))
+		log.Debugf("id=%v len(c.remoteStreamId)=%+v", c.uid, len(c.remoteStreamId))
 		c.streamLock.Unlock()
 		// user define
 		if c.OnTrack != nil {
@@ -134,10 +146,10 @@ func (c *Client) Join(sid string) error {
 					n, _, err := track.Read(b)
 					if err != nil {
 						if err == io.EOF {
-							log.Errorf("id=%v track.ReadRTP err=%v", c.ID, err)
+							log.Errorf("id=%v track.ReadRTP err=%v", c.uid, err)
 							return
 						}
-						log.Errorf("id=%v Error reading track rtp %s", c.ID, err)
+						log.Errorf("id=%v Error reading track rtp %s", c.uid, err)
 						continue
 					}
 					c.recvByte += n
@@ -147,22 +159,22 @@ func (c *Client) Join(sid string) error {
 	})
 
 	c.sub.pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		log.Debugf("id=%v [c.sub.pc.OnDataChannel] got dc %v", c.ID, dc.Label())
+		log.Debugf("id=%v [c.sub.pc.OnDataChannel] got dc %v", c.uid, dc.Label())
 		if dc.Label() == API_CHANNEL {
-			log.Debugf("%v got dc %v", c.ID, dc.Label())
+			log.Debugf("%v got dc %v", c.uid, dc.Label())
 			c.sub.api = dc
 			// send cmd after open
 			c.sub.api.OnOpen(func() {
 				if len(c.apiQueue) > 0 {
 					for _, cmd := range c.apiQueue {
-						log.Debugf("%v c.sub.api.OnOpen send cmd=%v", c.ID, cmd)
+						log.Debugf("%v c.sub.api.OnOpen send cmd=%v", c.uid, cmd)
 						marshalled, err := json.Marshal(cmd)
 						if err != nil {
 							continue
 						}
 						err = c.sub.api.Send(marshalled)
 						if err != nil {
-							log.Errorf("id=%v err=%v", c.ID, err)
+							log.Errorf("id=%v err=%v", c.uid, err)
 						}
 						time.Sleep(time.Millisecond * 10)
 					}
@@ -171,7 +183,7 @@ func (c *Client) Join(sid string) error {
 			})
 			return
 		}
-		log.Debugf("%v got dc %v", c.ID, dc.Label())
+		log.Debugf("%v got dc %v", c.uid, dc.Label())
 		if c.OnDataChannel != nil {
 			c.OnDataChannel(dc)
 		}
@@ -185,7 +197,7 @@ func (c *Client) Join(sid string) error {
 	if err != nil {
 		return err
 	}
-	err = c.signal.Join(sid, c.ID, offer)
+	err = c.signal.Join(sid, c.uid, offer)
 	return err
 }
 
@@ -225,7 +237,7 @@ func (c *Client) UnPublish(t *webrtc.RTPTransceiver) error {
 
 // Close client close
 func (c *Client) Close() {
-	log.Debugf("id=%v", c.ID)
+	log.Debugf("id=%v", c.uid)
 	close(c.notify)
 	if c.pub != nil {
 		c.pub.pc.Close()
@@ -233,17 +245,19 @@ func (c *Client) Close() {
 	if c.sub != nil {
 		c.sub.pc.Close()
 	}
+
+	c.engine.DelClient(c)
 }
 
 // CreateDataChannel create a custom datachannel
 func (c *Client) CreateDataChannel(label string) (*webrtc.DataChannel, error) {
-	log.Debugf("id=%v CreateDataChannel %v", c.ID, label)
+	log.Debugf("id=%v CreateDataChannel %v", c.uid, label)
 	return c.pub.pc.CreateDataChannel(label, &webrtc.DataChannelInit{})
 }
 
 // Trickle receive candidate from sfu and add to pc
 func (c *Client) Trickle(candidate webrtc.ICECandidateInit, target int) {
-	log.Debugf("id=%v candidate=%v target=%v", c.ID, candidate, target)
+	log.Debugf("id=%v candidate=%v target=%v", c.uid, candidate, target)
 	var t *Transport
 	if target == SUBSCRIBER {
 		t = c.sub
@@ -256,7 +270,7 @@ func (c *Client) Trickle(candidate webrtc.ICECandidateInit, target int) {
 	} else {
 		err := t.pc.AddICECandidate(candidate)
 		if err != nil {
-			log.Errorf("id=%v err=%v", c.ID, err)
+			log.Errorf("id=%v err=%v", c.uid, err)
 		}
 	}
 
@@ -264,18 +278,18 @@ func (c *Client) Trickle(candidate webrtc.ICECandidateInit, target int) {
 
 // Negotiate sub negotiate
 func (c *Client) Negotiate(sdp webrtc.SessionDescription) error {
-	log.Debugf("id=%v Negotiate sdp=%v", c.ID, sdp)
+	log.Debugf("id=%v Negotiate sdp=%v", c.uid, sdp)
 	// 1.sub set remote sdp
 	err := c.sub.pc.SetRemoteDescription(sdp)
 	if err != nil {
-		log.Errorf("id=%v Negotiate c.sub.pc.SetRemoteDescription err=%v", c.ID, err)
+		log.Errorf("id=%v Negotiate c.sub.pc.SetRemoteDescription err=%v", c.uid, err)
 		return err
 	}
 
 	// 2. safe to send candiate to sfu after join ok
 	if len(c.sub.SendCandidates) > 0 {
 		for _, cand := range c.sub.SendCandidates {
-			log.Debugf("id=%v send sub.SendCandidates c.ID, c.signal.Trickle cand=%v", c.ID, cand)
+			log.Debugf("id=%v send sub.SendCandidates c.uid, c.signal.Trickle cand=%v", c.uid, cand)
 			c.signal.Trickle(cand, SUBSCRIBER)
 		}
 		c.sub.SendCandidates = []*webrtc.ICECandidate{}
@@ -284,7 +298,7 @@ func (c *Client) Negotiate(sdp webrtc.SessionDescription) error {
 	// 3. safe to add candidate after SetRemoteDescription
 	if len(c.sub.RecvCandidates) > 0 {
 		for _, candidate := range c.sub.RecvCandidates {
-			log.Debugf("id=%v Negotiate c.sub.pc.AddICECandidate candidate=%v", c.ID, candidate)
+			log.Debugf("id=%v Negotiate c.sub.pc.AddICECandidate candidate=%v", c.uid, candidate)
 			_ = c.sub.pc.AddICECandidate(candidate)
 		}
 		c.sub.RecvCandidates = []webrtc.ICECandidateInit{}
@@ -293,14 +307,14 @@ func (c *Client) Negotiate(sdp webrtc.SessionDescription) error {
 	// 4. create answer after add ice candidate
 	answer, err := c.sub.pc.CreateAnswer(nil)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.ID, err)
+		log.Errorf("id=%v err=%v", c.uid, err)
 		return err
 	}
 
 	// 5. set local sdp(answer)
 	err = c.sub.pc.SetLocalDescription(answer)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.ID, err)
+		log.Errorf("id=%v err=%v", c.uid, err)
 		return err
 	}
 
@@ -315,23 +329,23 @@ func (c *Client) OnNegotiationNeeded() {
 	// 1. pub create offer
 	offer, err := c.pub.pc.CreateOffer(nil)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.ID, err)
+		log.Errorf("id=%v err=%v", c.uid, err)
 	}
 
 	// 2. pub set local sdp(offer)
 	err = c.pub.pc.SetLocalDescription(offer)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.ID, err)
+		log.Errorf("id=%v err=%v", c.uid, err)
 	}
 
-	log.Debugf("id=%v OnNegotiationNeeded!! c.pub.pc.CreateOffer and send offer=%v", c.ID, offer)
+	log.Debugf("id=%v OnNegotiationNeeded!! c.pub.pc.CreateOffer and send offer=%v", c.uid, offer)
 	//3. send offer to sfu
 	c.signal.Offer(offer)
 }
 
 // selectRemote select remote video/audio
 func (c *Client) selectRemote(streamId, video string, audio bool) error {
-	log.Debugf("id=%v streamId=%v video=%v audio=%v", c.ID, streamId, video, audio)
+	log.Debugf("id=%v streamId=%v video=%v audio=%v", c.uid, streamId, video, audio)
 	call := Call{
 		StreamID: streamId,
 		Video:    video,
@@ -340,7 +354,7 @@ func (c *Client) selectRemote(streamId, video string, audio bool) error {
 
 	// cache cmd when dc not ready
 	if c.sub.api == nil || c.sub.api.ReadyState() != webrtc.DataChannelStateOpen {
-		log.Debugf("id=%v append to c.apiQueue call=%v", c.ID, call)
+		log.Debugf("id=%v append to c.apiQueue call=%v", c.uid, call)
 		c.apiQueue = append(c.apiQueue, call)
 		return nil
 	}
@@ -348,7 +362,7 @@ func (c *Client) selectRemote(streamId, video string, audio bool) error {
 	// send cached cmd
 	if len(c.apiQueue) > 0 {
 		for _, cmd := range c.apiQueue {
-			log.Debugf("id=%v c.sub.api.Send cmd=%v", c.ID, cmd)
+			log.Debugf("id=%v c.sub.api.Send cmd=%v", c.uid, cmd)
 			marshalled, err := json.Marshal(cmd)
 			if err != nil {
 				continue
@@ -363,14 +377,14 @@ func (c *Client) selectRemote(streamId, video string, audio bool) error {
 	}
 
 	// send this cmd
-	log.Debugf("id=%v c.sub.api.Send call=%v", c.ID, call)
+	log.Debugf("id=%v c.sub.api.Send call=%v", c.uid, call)
 	marshalled, err := json.Marshal(call)
 	if err != nil {
 		return err
 	}
 	err = c.sub.api.Send(marshalled)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.ID, err)
+		log.Errorf("id=%v err=%v", c.uid, err)
 	}
 	return err
 }
@@ -381,7 +395,7 @@ func (c *Client) UnSubscribeAll() {
 	m := c.remoteStreamId
 	c.streamLock.RUnlock()
 	for streamId := range m {
-		log.Debugf("id=%v UnSubscribe remote streamid=%v", c.ID, streamId)
+		log.Debugf("id=%v UnSubscribe remote streamid=%v", c.uid, streamId)
 		c.selectRemote(streamId, "none", false)
 	}
 }
@@ -392,7 +406,7 @@ func (c *Client) SubscribeAll(video string, audio bool) {
 	m := c.remoteStreamId
 	c.streamLock.RUnlock()
 	for streamId := range m {
-		log.Debugf("id=%v Subscribe remote streamid=%v", c.ID, streamId)
+		log.Debugf("id=%v Subscribe remote streamid=%v", c.uid, streamId)
 		c.selectRemote(streamId, video, audio)
 	}
 }
@@ -402,7 +416,7 @@ func (c *Client) PublishWebm(file string, video, audio bool) error {
 	ext := filepath.Ext(file)
 	switch ext {
 	case ".webm":
-		c.producer = NewWebMProducer(c.ID, file, 0)
+		c.producer = NewWebMProducer(c.uid, file, 0)
 	default:
 		return errInvalidFile
 	}
@@ -446,7 +460,7 @@ func (c *Client) Simulcast(layer string) {
 	log.Infof("Simulcast: streams=%v", m)
 	c.streamLock.RUnlock()
 	for streamId := range m {
-		log.Debugf("id=%v simulcast remote streamid=%v", c.ID, streamId)
+		log.Debugf("id=%v simulcast remote streamid=%v", c.uid, streamId)
 		c.selectRemote(streamId, layer, true)
 	}
 }
