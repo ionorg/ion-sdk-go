@@ -10,10 +10,10 @@ require (
 	github.com/pion/ice/v2 v2.0.15
 	github.com/pion/ion-log v1.0.0
 	github.com/pion/ion-sfu v1.9.4-0.20210304193051-6b6be58a1c9b
-	github.com/pion/mediadevices v0.1.17
 	github.com/pion/rtcp v1.2.6
 	github.com/pion/rtp v1.6.2
 	github.com/pion/sdp/v3 v3.0.4
+	github.com/pion/webrtc/v2 v2.2.26
 	github.com/pion/webrtc/v3 v3.0.11
 	github.com/stretchr/testify v1.7.0
 	google.golang.org/grpc v1.35.0

@@ -13,39 +13,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type PeerState int32
-
-const (
-	PeerJOIN   PeerState = 0
-	PeerUPDATE PeerState = 1
-	PeerLEAVE  PeerState = 2
-)
-
-type Peer struct {
-	Sid  string
-	Uid  string
-	Info []byte
-}
-
-type Track struct {
-	Id        string
-	Label     string
-	Kind      string
-	Simulcast map[string]string
-}
-
-type Stream struct {
-	Id     string
-	Tracks []*Track
-}
-
-type StreamState int32
-
-const (
-	StreamADD    StreamState = 0
-	StreamREMOVE StreamState = 2
-)
-
 type BizClient struct {
 	client biz.BizClient
 	stream biz.Biz_SignalClient
@@ -187,8 +154,9 @@ func (c *BizClient) bizSignalReadLoop() error {
 				c.OnJoin(reply.Success, reply.GetReason())
 			}
 		case *biz.SignalReply_LeaveReply:
+			reply := payload.LeaveReply
 			if c.OnLeave != nil {
-				c.OnLeave("")
+				c.OnLeave(reply.Reason)
 			}
 		case *biz.SignalReply_Msg:
 			msg := payload.Msg
