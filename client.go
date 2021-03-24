@@ -96,7 +96,7 @@ func NewClient(engine *Engine, addr string, cid string) (*Client, error) {
 func (c *Client) SetRemoteSDP(sdp webrtc.SessionDescription) error {
 	err := c.pub.pc.SetRemoteDescription(sdp)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.producer.webm.FindFirstVideoTrack().TrackUID, err)
+		log.Errorf("id=%v err=%v", c.uid, err)
 		return err
 	}
 
