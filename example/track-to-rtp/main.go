@@ -3,14 +3,17 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
+	"time"
+
 	log "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/webrtc/v3"
-	"net"
-	"time"
+
 	//"github.com/pion/rtcp"
-	"github.com/pion/rtp"
 	"os/exec"
+
+	"github.com/pion/rtp"
 )
 
 type udpConn struct {
@@ -147,15 +150,19 @@ func main() {
 	// new sdk engine
 	e := sdk.NewEngine(config)
 
-	// get a client from engine
-	c := e.AddClient(addr, session, "client id")
+	// create a new client from engine
+	c, err := sdk.NewClient(e, addr, "client id")
+	if err != nil {
+		log.Errorf("err=%v", err)
+		return
+	}
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
 	c.OnTrack = trackToRTP
 
 	// client join a session
-	err := c.Join(session)
+	err = c.Join(session)
 
 	// publish file to session if needed
 	if err != nil {

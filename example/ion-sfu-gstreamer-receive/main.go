@@ -40,10 +40,14 @@ func runClientLoop(addr, session string) {
 		},
 	}
 	// new sdk engine
-	e := sdk.NewEngine(config)
+	engine := sdk.NewEngine(config)
 
-	// get a client from engine
-	c := e.AddClient(addr, session, "client id")
+	// create a new client from engine
+	c, err := sdk.NewClient(engine, addr, "")
+	if err != nil {
+		log.Errorf("sdk.NewClient: err=%v", err)
+		return
+	}
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
@@ -63,11 +67,13 @@ func runClientLoop(addr, session string) {
 		fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
 		pipeline := gst.CreatePipeline(strings.ToLower(codecName))
 		pipeline.Start()
+		defer pipeline.Stop()
 		buf := make([]byte, 1400)
 		for {
 			i, _, readErr := track.Read(buf)
 			if readErr != nil {
 				log.Errorf("%v", readErr)
+				return
 			}
 
 			pipeline.Push(buf[:i])
@@ -75,7 +81,7 @@ func runClientLoop(addr, session string) {
 	}
 
 	// client join a session
-	err := c.Join(session)
+	err = c.Join(session)
 
 	// publish file to session if needed
 	if err != nil {
