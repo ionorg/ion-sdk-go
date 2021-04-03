@@ -54,13 +54,24 @@ func main() {
 	e := sdk.NewEngine(config)
 
 	// get a client from engine
-	c := e.AddClient(addr, session, "client id")
+	c, err := sdk.NewClient(e, addr, "client id")
 
-	// client join a session
-	err := c.Join(session)
+	c.GetPubTransport().GetPeerConnection().OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+		log.Infof("Connection state changed: %s", state)
+	})
 
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("client err=%v", err)
+		panic(err)
+	}
+
+	e.AddClient(c)
+
+	// client join a session
+	err = c.Join(session)
+
+	if err != nil {
+		log.Errorf("join err=%v", err)
 		panic(err)
 	}
 
