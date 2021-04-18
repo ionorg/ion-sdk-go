@@ -10,7 +10,7 @@ import (
 	"github.com/lucsky/cuid"
 	log "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
-	gst "github.com/pion/ion-sdk-go/pkg/gstreamer-sink"
+	gst "github.com/pion/ion-sdk-go/pkg/gst"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 )

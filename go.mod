@@ -15,6 +15,8 @@ require (
 	github.com/pion/rtp v1.6.2
 	github.com/pion/sdp/v3 v3.0.4
 	github.com/pion/webrtc/v3 v3.0.11
+	github.com/square/go-jose/v3 v3.0.0-20200630053402-0a67ce9b0693
 	google.golang.org/grpc v1.35.0
+	google.golang.org/protobuf v1.25.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
