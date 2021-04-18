@@ -4,13 +4,13 @@ import (
 	"flag"
 	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	log "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
-	gst "github.com/pion/ion-sdk-go/pkg/gstreamer-sink"
-	"github.com/pion/rtcp"
+	gst "github.com/pion/ion-sdk-go/pkg/gst"
 	"github.com/pion/webrtc/v3"
 )
 
@@ -49,46 +49,49 @@ func runClientLoop(addr, session string) {
 		return
 	}
 
-	// subscribe rtp from sessoin
-	// comment this if you don't need save to file
-	c.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
-		go func() {
-			ticker := time.NewTicker(time.Second * 3)
-			for range ticker.C {
-				rtcpSendErr := c.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
-				if rtcpSendErr != nil {
-					fmt.Println(rtcpSendErr)
-				}
-			}
-		}()
+	filename := strings.ReplaceAll(session, " ", "-") + "-" + strconv.FormatInt(time.Now().Unix(), 10) + ".avi"
+	destination := "filesink location=./" + filename
+	videoEncoder := "x264enc bframes=0 speed-preset=ultrafast key-int-max=60 ! video/x-h264, profile=baseline "
+	//destination="movie.avi"
 
-		codecName := strings.Split(track.Codec().RTPCodecCapability.MimeType, "/")[1]
-		fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
-		pipeline := gst.CreatePipeline(strings.ToLower(codecName))
-		pipeline.Start()
-		defer pipeline.Stop()
-		buf := make([]byte, 1400)
-		for {
-			i, _, readErr := track.Read(buf)
-			if readErr != nil {
-				log.Errorf("%v", readErr)
-				return
-			}
+	compositorString := fmt.Sprintf(`
+		qtmux name=savemux ! queue ! %s sync=false async=false
+			vtee. ! queue ! savemux.
+			atee. ! queue ! savemux.
 
-			pipeline.Push(buf[:i])
+	`, destination)
+
+	log.Infof("Beginning Recording Compositor[%s]: %s -> %s", addr, videoEncoder, filename)
+
+	pipelineID := addr + "|" + filename
+	log.Infof("connected pipeline[%s]!", pipelineID)
+	compositor := gst.NewCompositorPipeline(compositorString)
+
+	c.OnTrack = func(t *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
+		log.Debugf("pipeline[%s] got track: %#v", pipelineID, t)
+		if t.Kind() == webrtc.RTPCodecTypeVideo && t.Codec().MimeType != webrtc.MimeTypeH264 {
+			log.Errorf("only h264 video is supported currently, please help me improve this example :) ")
+			panic("exiting")
 		}
+
+		compositor.AddInputTrack(t, c.GetSubTransport().GetPeerConnection())
+	}
+
+	compositor.OnRemoveTrack = func(t *webrtc.TrackRemote) {
+		log.Infof("REMOVED TRACK", t.Codec(), len(compositor.Tracks))
 	}
 
 	// client join a session
 	err = c.Join(session)
-
-	// publish file to session if needed
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error joining room:", err)
+		panic(err)
 	}
 
-	select {}
+	log.Infof("joined pipeline[%s]!", pipelineID)
+	compositor.Play()
+	log.Infof("compositing!")
+
 }
 
 func main() {
@@ -104,5 +107,6 @@ func main() {
 	flag.Parse()
 
 	go runClientLoop(addr, session)
-	gst.StartMainLoop()
+
+	gst.MainLoop()
 }
