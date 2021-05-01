@@ -6,11 +6,11 @@ import (
 
 	log "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
-	"github.com/pion/webrtc/v3"
 	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/codec/vpx"
 	"github.com/pion/mediadevices/pkg/frame"
 	"github.com/pion/mediadevices/pkg/prop"
+	"github.com/pion/webrtc/v3"
 
 	// Note: If you don't have a camera or microphone or your adapters are not supported,
 	//       you can always swap your adapters with our dummy adapters below.
@@ -18,14 +18,11 @@ import (
 	// _ "github.com/pion/mediadevices/pkg/driver/audiotest"
 	_ "github.com/pion/mediadevices/pkg/driver/camera"     // This is required to register camera adapter
 	_ "github.com/pion/mediadevices/pkg/driver/microphone" // This is required to register microphone adapter
-
 )
 
 func main() {
 	// init log
-	fixByFile := []string{"asm_amd64.s", "proc.go", "icegatherer.go"}
-	fixByFunc := []string{"AddProducer", "NewClient"}
-	log.Init("debug", fixByFile, fixByFunc)
+	log.Init("debug")
 
 	// parse flag
 	var session, addr string
@@ -74,7 +71,6 @@ func main() {
 		log.Errorf("join err=%v", err)
 		panic(err)
 	}
-
 
 	vpxParams, err := vpx.NewVP8Params()
 	if err != nil {

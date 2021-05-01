@@ -51,10 +51,6 @@ func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle
 }
 
 func main() {
-	//init log
-	fixByFile := []string{"asm_amd64.s", "proc.go", "icegatherer.go"}
-	fixByFunc := []string{"AddProducer", "NewClient"}
-
 	//get args
 	var session, gaddr, file, role, loglevel, simulcast, paddr string
 	var total, cycle, duration int
@@ -73,7 +69,7 @@ func main() {
 	flag.StringVar(&simulcast, "simulcast", "", "simulcast layer q|h|f")
 	flag.StringVar(&paddr, "paddr", "", "pprof listening addr")
 	flag.Parse()
-	log.Init(loglevel, fixByFile, fixByFunc)
+	log.Init(loglevel)
 
 	se := webrtc.SettingEngine{}
 	se.SetEphemeralUDPPortRange(10000, 15000)

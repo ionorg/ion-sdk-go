@@ -27,9 +27,7 @@ func init() {
 }
 
 func main() {
-	fixByFile := []string{"asm_amd64.s", "proc.go"}
-	fixByFunc := []string{}
-	log.Init("debug", fixByFile, fixByFunc)
+	log.Init("debug")
 
 	// parse flag
 	var session, addr string

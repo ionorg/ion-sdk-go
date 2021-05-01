@@ -44,9 +44,7 @@ func saveToDisk(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 
 func main() {
 	// init log
-	fixByFile := []string{"asm_amd64.s", "proc.go", "icegatherer.go"}
-	fixByFunc := []string{"AddProducer", "NewClient"}
-	log.Init("debug", fixByFile, fixByFunc)
+	log.Init("debug")
 
 	// parse flag
 	var session, addr, file string
