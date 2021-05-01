@@ -26,10 +26,7 @@ func NewEngine(cfg Config) *Engine {
 	}
 	e.cfg = cfg
 
-	fixByFile := []string{"asm_amd64.s", "proc.go", "icegatherer.go", "client.go", "signal.go"}
-	fixByFunc := []string{}
-
-	log.Init(cfg.Log.Level, fixByFile, fixByFunc)
+	log.Init(cfg.Log.Level)
 	return e
 }
 
