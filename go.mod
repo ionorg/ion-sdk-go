@@ -8,13 +8,15 @@ require (
 	github.com/golang/protobuf v1.4.3
 	github.com/lucsky/cuid v1.0.2
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99 // indirect
-	github.com/pion/ice/v2 v2.0.15
-	github.com/pion/ion-log v1.1.0
-	github.com/pion/ion-sfu v1.9.4-0.20210304193051-6b6be58a1c9b
+	github.com/pion/ice/v2 v2.1.7
+	github.com/pion/ion-log v1.2.0
+	github.com/pion/ion-sfu v1.10.4-0.20210517163413-6e6e24505e51
+	github.com/pion/mediadevices v0.2.0
 	github.com/pion/rtcp v1.2.6
-	github.com/pion/rtp v1.6.2
+	github.com/pion/rtp v1.6.5
 	github.com/pion/sdp/v3 v3.0.4
-	github.com/pion/webrtc/v3 v3.0.11
+	github.com/pion/webrtc/v3 v3.0.29
+	github.com/sirupsen/logrus v1.8.1
 	github.com/square/go-jose/v3 v3.0.0-20200630053402-0a67ce9b0693
 	github.com/stretchr/testify v1.7.0
 	google.golang.org/grpc v1.35.0

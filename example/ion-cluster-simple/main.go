@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lucsky/cuid"
-	log "github.com/pion/ion-log"
+	ilog "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	gst "github.com/pion/ion-sdk-go/pkg/gstreamer-sink"
 	"github.com/pion/rtcp"
@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	log  = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-cluster", nil)
 	info = map[string]interface{}{"name": "bizclient"}
 	uid  = cuid.New()
 )

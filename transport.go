@@ -2,7 +2,6 @@ package engine
 
 import (
 	"github.com/pion/ice/v2"
-	log "github.com/pion/ion-log"
 	"github.com/pion/webrtc/v3"
 )
 

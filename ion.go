@@ -1,7 +1,6 @@
 package engine
 
 import (
-	log "github.com/pion/ion-log"
 	"github.com/pion/webrtc/v3"
 )
 
@@ -90,9 +89,6 @@ func NewIonConnector(addr string, uid string, pinfo map[string]interface{}) *Ion
 		},
 	}
 	config := Config{
-		Log: log.Config{
-			Level: "debug",
-		},
 		WebRTC: WebRTCTransportConfig{
 			Configuration: webrtcCfg,
 		},
@@ -128,7 +124,7 @@ func NewIonConnector(addr string, uid string, pinfo map[string]interface{}) *Ion
 				}
 			}
 
-			c.Join(i.sid)
+			c.Join(i.sid, nil)
 
 			i.sfu = c
 		}

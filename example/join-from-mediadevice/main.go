@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	log "github.com/pion/ion-log"
+	ilog "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/mediadevices"
 	"github.com/pion/mediadevices/pkg/codec/vpx"
@@ -20,9 +20,11 @@ import (
 	_ "github.com/pion/mediadevices/pkg/driver/microphone" // This is required to register microphone adapter
 )
 
+var (
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
+)
+
 func main() {
-	// init log
-	log.Init("debug")
 
 	// parse flag
 	var session, addr string
@@ -65,7 +67,7 @@ func main() {
 	e.AddClient(c)
 
 	// client join a session
-	err = c.Join(session)
+	err = c.Join(session, nil)
 
 	if err != nil {
 		log.Errorf("join err=%v", err)
