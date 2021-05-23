@@ -63,9 +63,6 @@ func main() {
 	}
 
 	config := sdk.Config{
-		Log: log.Config{
-			Level: "debug",
-		},
 		WebRTC: sdk.WebRTCTransportConfig{
 			Configuration: webrtcCfg,
 		},
@@ -84,7 +81,7 @@ func main() {
 	c.OnTrack = saveToDisk
 
 	// client join a session
-	err = c.Join(session)
+	err = c.Join(session, nil)
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return

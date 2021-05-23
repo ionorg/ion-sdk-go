@@ -6,7 +6,7 @@ import (
 	"net"
 	"time"
 
-	log "github.com/pion/ion-log"
+	ilog "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/webrtc/v3"
 
@@ -14,6 +14,10 @@ import (
 	"os/exec"
 
 	"github.com/pion/rtp"
+)
+
+var (
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
 )
 
 type udpConn struct {
@@ -118,9 +122,6 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 }
 
 func main() {
-	// init log
-	log.Init("debug")
-
 	// parse flag
 	var session, addr, file string
 	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
@@ -138,9 +139,6 @@ func main() {
 	}
 
 	config := sdk.Config{
-		Log: log.Config{
-			Level: "debug",
-		},
 		WebRTC: sdk.WebRTCTransportConfig{
 			Configuration: webrtcCfg,
 		},
@@ -160,7 +158,7 @@ func main() {
 	c.OnTrack = trackToRTP
 
 	// client join a session
-	err = c.Join(session)
+	err = c.Join(session, nil)
 
 	// publish file to session if needed
 	if err != nil {

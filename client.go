@@ -8,9 +8,30 @@ import (
 	"time"
 
 	"github.com/lucsky/cuid"
-	log "github.com/pion/ion-log"
 	"github.com/pion/webrtc/v3"
 )
+
+func NewJoinConfig() *JoinConfig {
+	m := make(JoinConfig)
+	return &m
+}
+
+type JoinConfig map[string]string
+
+func (j JoinConfig) SetNoPublish() *JoinConfig {
+	j["NoPublish"] = "true"
+	return &j
+}
+
+func (j JoinConfig) SetNoSubscribe() *JoinConfig {
+	j["NoSubscribe"] = "true"
+	return &j
+}
+
+func SetRelay(j JoinConfig) *JoinConfig {
+	j["Relay"] = "true"
+	return &j
+}
 
 const (
 	API_CHANNEL = "ion-sfu"
@@ -124,7 +145,7 @@ func (c *Client) SetRemoteSDP(sdp webrtc.SessionDescription) error {
 }
 
 // Join client join a session
-func (c *Client) Join(sid string) error {
+func (c *Client) Join(sid string, config *JoinConfig) error {
 	log.Debugf("[Client.Join] sid=%v uid=%v", sid, c.uid)
 	c.sub.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		log.Debugf("[c.sub.pc.OnTrack] got track streamId=%v kind=%v ssrc=%v ", track.StreamID(), track.Kind(), track.SSRC())
@@ -197,7 +218,7 @@ func (c *Client) Join(sid string) error {
 	if err != nil {
 		return err
 	}
-	err = c.signal.Join(sid, c.uid, offer)
+	err = c.signal.Join(sid, c.uid, offer, config)
 	return err
 }
 

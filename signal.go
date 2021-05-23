@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/pion/ion-log"
 	pb "github.com/pion/ion-sfu/cmd/signal/grpc/proto"
 	"github.com/pion/webrtc/v3"
 	"google.golang.org/grpc"
@@ -139,7 +138,7 @@ func (s *Signal) onSignalHandle() error {
 	}
 }
 
-func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription) error {
+func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription, config *JoinConfig) error {
 	log.Infof("[%v] [Signal.Join] sid=%v offer=%v", s.id, sid, offer)
 	marshalled, err := json.Marshal(offer)
 	if err != nil {
@@ -147,6 +146,9 @@ func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription) e
 	}
 	go s.onSignalHandleOnce()
 	s.Lock()
+	if config == nil {
+		config = NewJoinConfig()
+	}
 	err = s.stream.Send(
 		&pb.SignalRequest{
 			Payload: &pb.SignalRequest_Join{
@@ -154,6 +156,7 @@ func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription) e
 					Sid:         sid,
 					Uid:         uid,
 					Description: marshalled,
+					Config:      *config,
 				},
 			},
 		},

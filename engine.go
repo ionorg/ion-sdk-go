@@ -8,7 +8,11 @@ import (
 
 	_ "net/http/pprof"
 
-	log "github.com/pion/ion-log"
+	ilog "github.com/pion/ion-log"
+)
+
+var (
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "engine", nil)
 )
 
 // Engine a sdk engine
@@ -26,7 +30,6 @@ func NewEngine(cfg Config) *Engine {
 	}
 	e.cfg = cfg
 
-	log.Init(cfg.Log.Level)
 	return e
 }
 

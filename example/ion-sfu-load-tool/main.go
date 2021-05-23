@@ -5,9 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/pion/ion-log"
+	"github.com/lucsky/cuid"
+	ilog "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/webrtc/v3"
+	"github.com/sirupsen/logrus"
+)
+
+var (
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
 )
 
 func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle int, video, audio bool, simulcast string) {
@@ -18,28 +24,41 @@ func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle
 	for i := 0; i < total; i++ {
 		switch role {
 		case "pubsub":
-			cid := fmt.Sprintf("%s_pubsub_%d", session, i)
+			cid := fmt.Sprintf("%s_pubsub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
 			c, err := sdk.NewClient(e, addr, cid)
 			if err != nil {
 				log.Errorf("%v", err)
 				break
 			}
-			c.Join(session)
+			config := sdk.NewJoinConfig()
+			c.Join(session, config)
 			c.PublishWebm(file, video, audio)
 			c.Simulcast(simulcast)
 		case "sub":
-			cid := fmt.Sprintf("%s_sub_%d", session, i)
+			cid := fmt.Sprintf("%s_sub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
 			c, err := sdk.NewClient(e, addr, cid)
 			if err != nil {
 				log.Errorf("%v", err)
 				break
 			}
-			c.Join(session)
+			config := sdk.NewJoinConfig().SetNoPublish()
+			c.Join(session, config)
+			c.Simulcast(simulcast)
+		case "pub":
+			cid := fmt.Sprintf("%s_pub_%d_%s", session, i, cuid.New())
+			log.Infof("AddClient session=%v clientid=%v", session, cid)
+			c, err := sdk.NewClient(e, addr, cid)
+			if err != nil {
+				log.Errorf("%v", err)
+				break
+			}
+			config := sdk.NewJoinConfig().SetNoSubscribe()
+			c.Join(session, config)
 			c.Simulcast(simulcast)
 		default:
-			log.Errorf("invalid role! should be pubsub/sub")
+			log.Errorf("invalid role! should be pubsub/sub/pub")
 		}
 
 		time.Sleep(time.Millisecond * time.Duration(cycle))
@@ -69,7 +88,16 @@ func main() {
 	flag.StringVar(&simulcast, "simulcast", "", "simulcast layer q|h|f")
 	flag.StringVar(&paddr, "paddr", "", "pprof listening addr")
 	flag.Parse()
-	log.Init(loglevel)
+	switch loglevel {
+	case "error":
+		log.SetLevel(logrus.ErrorLevel)
+	case "warn":
+		log.SetLevel(logrus.WarnLevel)
+	case "info":
+		log.SetLevel(logrus.InfoLevel)
+	default:
+		log.SetLevel(logrus.DebugLevel)
+	}
 
 	se := webrtc.SettingEngine{}
 	se.SetEphemeralUDPPortRange(10000, 15000)
@@ -81,9 +109,6 @@ func main() {
 		},
 	}
 	config := sdk.Config{
-		Log: log.Config{
-			Level: loglevel,
-		},
 		WebRTC: sdk.WebRTCTransportConfig{
 			VideoMime:     "video/vp8",
 			Setting:       se,

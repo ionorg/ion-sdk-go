@@ -7,11 +7,15 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/pion/ion-log"
+	ilog "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	gst "github.com/pion/ion-sdk-go/pkg/gstreamer-sink"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
+)
+
+var (
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
 )
 
 func init() {
@@ -81,7 +85,7 @@ func runClientLoop(addr, session string) {
 	}
 
 	// client join a session
-	err = c.Join(session)
+	err = c.Join(session, nil)
 
 	// publish file to session if needed
 	if err != nil {
@@ -92,9 +96,6 @@ func runClientLoop(addr, session string) {
 }
 
 func main() {
-	// init log
-	log.Init("debug")
-
 	// parse flag
 	var session, addr string
 	flag.StringVar(&addr, "addr", "localhost:50051", "ion-cluster grpc addr")

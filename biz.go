@@ -5,7 +5,6 @@ import (
 	"io"
 	"sync"
 
-	log "github.com/pion/ion-log"
 	"github.com/pion/ion-sdk-go/pkg/grpc/biz"
 	"github.com/pion/ion-sdk-go/pkg/grpc/ion"
 	"github.com/square/go-jose/v3/json"
