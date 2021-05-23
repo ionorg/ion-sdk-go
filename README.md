@@ -2,6 +2,7 @@
 this is ion golang sdk for ion-sfu
 Feature:
 - [x] Join a session
+  - [x] Join with config(NoPublish/NoSubscribe/Relay)
 - [x] Subscribe from session
   - [x] OnTrack(user-defined)
 - [x] Publish file to session
