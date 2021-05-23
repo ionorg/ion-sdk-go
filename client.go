@@ -239,6 +239,7 @@ func (c *Client) UnPublish(t *webrtc.RTPTransceiver) error {
 func (c *Client) Close() {
 	log.Debugf("id=%v", c.uid)
 	close(c.notify)
+	c.signal.Close()
 	if c.pub != nil {
 		c.pub.pc.Close()
 	}
@@ -329,13 +330,13 @@ func (c *Client) OnNegotiationNeeded() {
 	// 1. pub create offer
 	offer, err := c.pub.pc.CreateOffer(nil)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.uid, err)
+		log.Debugf("id=%v err=%v", c.uid, err)
 	}
 
 	// 2. pub set local sdp(offer)
 	err = c.pub.pc.SetLocalDescription(offer)
 	if err != nil {
-		log.Errorf("id=%v err=%v", c.uid, err)
+		log.Debugf("id=%v err=%v", c.uid, err)
 	}
 
 	log.Debugf("id=%v OnNegotiationNeeded!! c.pub.pc.CreateOffer and send offer=%v", c.uid, offer)

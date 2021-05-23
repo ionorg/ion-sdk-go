@@ -49,8 +49,8 @@ func main() {
 	// parse flag
 	var session, addr, file string
 	flag.StringVar(&file, "file", "", "Path to the file media")
-	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test session", "join session name")
+	flag.StringVar(&addr, "addr", "0.0.0.0:50052", "Ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "test", "join session name")
 	flag.Parse()
 
 	// add stun servers
@@ -74,14 +74,14 @@ func main() {
 	e := sdk.NewEngine(config)
 
 	// create a new client from engine
-	c, err := sdk.NewClient(e, addr, "client id")
+	c, err := sdk.NewClient(e, addr, "clientid2")
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return
 	}
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
-	c.OnTrack = saveToDisk
+	// c.OnTrack = saveToDisk
 
 	// client join a session
 	err = c.Join(session)
