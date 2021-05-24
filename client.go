@@ -272,7 +272,7 @@ func (c *Client) Close() {
 		c.producer.Stop()
 	}
 	c.signal.Close()
-	c.engine.DelClient(c)
+	c.engine.RemoveClient(c)
 }
 
 // CreateDataChannel create a custom datachannel
