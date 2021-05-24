@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "engine", nil)
+	log = ilog.NewLoggerWithFields(ilog.WarnLevel, "engine", nil)
 )
 
 // Engine a sdk engine
@@ -43,7 +43,7 @@ func (e *Engine) AddClient(c *Client) error {
 	if e.clients[c.sid] == nil {
 		e.clients[c.sid] = make(map[string]*Client)
 	}
-
+	fmt.Println(fmt.Sprintf("engine sid-%v cid-%v", c.sid, c.uid))
 	e.clients[c.sid][c.uid] = c
 	if c == nil {
 		err := fmt.Errorf("client is nil")
@@ -56,16 +56,19 @@ func (e *Engine) AddClient(c *Client) error {
 
 // DelClient delete a client
 func (e *Engine) DelClient(c *Client) error {
+	log.Warnf("%v", e.clients)
 	e.Lock()
+	log.Warnf("%v", c.sid)
 	if e.clients[c.sid] == nil {
 		e.Unlock()
 		return errInvalidSessID
 	}
-	if c, ok := e.clients[c.sid][c.uid]; ok && (c != nil) {
-		c.Close()
-	}
 	delete(e.clients[c.sid], c.uid)
 	e.Unlock()
+	if c, ok := e.clients[c.sid][c.uid]; ok && (c != nil) {
+		fmt.Println("c close")
+		c.Close()
+	}
 	return nil
 }
 
