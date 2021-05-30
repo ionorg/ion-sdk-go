@@ -12,8 +12,14 @@ import (
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "engine", nil)
+	log = ilog.NewLoggerWithFields(ilog.WarnLevel, "engine", nil)
 )
+
+type stat struct {
+	clients     int
+	totalRecvBW int
+	totalSendBW int
+}
 
 // Engine a sdk engine
 type Engine struct {
@@ -21,6 +27,7 @@ type Engine struct {
 
 	sync.RWMutex
 	clients map[string]map[string]*Client
+	stats   stat
 }
 
 // NewEngine create a engine
@@ -43,7 +50,6 @@ func (e *Engine) AddClient(c *Client) error {
 	if e.clients[c.sid] == nil {
 		e.clients[c.sid] = make(map[string]*Client)
 	}
-
 	e.clients[c.sid][c.uid] = c
 	if c == nil {
 		err := fmt.Errorf("client is nil")
@@ -51,6 +57,18 @@ func (e *Engine) AddClient(c *Client) error {
 		return err
 	}
 
+	return nil
+}
+
+func (e *Engine) RemoveClient(c *Client) error {
+	e.Lock()
+	defer e.Unlock()
+	if e.clients[c.sid] == nil {
+		return errInvalidSessID
+	}
+	if c, ok := e.clients[c.sid][c.uid]; ok && (c != nil) {
+		delete(e.clients[c.sid], c.uid)
+	}
 	return nil
 }
 
@@ -62,47 +80,64 @@ func (e *Engine) DelClient(c *Client) error {
 		return errInvalidSessID
 	}
 	if c, ok := e.clients[c.sid][c.uid]; ok && (c != nil) {
+		delete(e.clients[c.sid], c.uid)
+		e.Unlock()
 		c.Close()
+	} else {
+		e.Unlock()
 	}
-	delete(e.clients[c.sid], c.uid)
-	e.Unlock()
 	return nil
 }
 
 // Stats show a total stats to console: clients and bandwidth
-func (e *Engine) Stats(cycle int) string {
+func (e *Engine) Stats(cycle int, close <-chan struct{}) string {
 	for {
-		info := "\n-------stats-------\n"
+		select {
+		case <-close:
+			return ""
+		default:
+			info := "\n-------stats-------\n"
 
-		e.RLock()
-		if len(e.clients) == 0 {
-			e.RUnlock()
-			continue
-		}
-		n := 0
-		for _, m := range e.clients {
-			n += len(m)
-		}
-		info += fmt.Sprintf("Clients: %d\n", n)
-
-		totalRecvBW, totalSendBW := 0, 0
-		for _, m := range e.clients {
-			for _, c := range m {
-				if c == nil {
-					continue
-				}
-				recvBW, sendBW := c.getBandWidth(cycle)
-				totalRecvBW += recvBW
-				totalSendBW += sendBW
+			e.RLock()
+			if len(e.clients) == 0 {
+				e.RUnlock()
+				continue
 			}
+			n := 0
+			for _, m := range e.clients {
+				n += len(m)
+			}
+			info += fmt.Sprintf("Clients: %d\n", n)
+
+			totalRecvBW, totalSendBW := 0, 0
+			for _, m := range e.clients {
+				for _, c := range m {
+					if c == nil {
+						continue
+					}
+					recvBW, sendBW := c.getBandWidth(cycle)
+					totalRecvBW += recvBW
+					totalSendBW += sendBW
+				}
+			}
+
+			info += fmt.Sprintf("RecvBandWidth: %d KB/s\n", totalRecvBW)
+			info += fmt.Sprintf("SendBandWidth: %d KB/s\n", totalSendBW)
+			e.stats = stat{
+				clients:     n,
+				totalRecvBW: totalRecvBW,
+				totalSendBW: totalSendBW,
+			}
+			e.RUnlock()
+			log.Warnf(info) //TEMP
+			time.Sleep(time.Duration(cycle) * time.Second)
 		}
 
-		info += fmt.Sprintf("RecvBandWidth: %d KB/s\n", totalRecvBW)
-		info += fmt.Sprintf("SendBandWidth: %d KB/s\n", totalSendBW)
-		e.RUnlock()
-		log.Infof(info)
-		time.Sleep(time.Duration(cycle) * time.Second)
 	}
+}
+
+func (e *Engine) GetStat() (clients int, totalRecvBW int, totalSendBW int) {
+	return e.stats.clients, e.stats.totalRecvBW, e.stats.totalSendBW
 }
 
 // ServePProf listening pprof
