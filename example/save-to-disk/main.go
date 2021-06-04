@@ -10,7 +10,6 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media/ivfwriter"
 	"github.com/pion/webrtc/v3/pkg/media/oggwriter"
-	"net"
 	"strings"
 	"time"
 )
@@ -19,12 +18,6 @@ const (
 	audioFileName = "output.ogg"
 	videoFileName = "output.ivf"
 )
-
-type udpConn struct {
-	conn        *net.UDPConn
-	port        int
-	payloadType uint8
-}
 
 func main() {
 	// parse flag
@@ -81,16 +74,6 @@ func main() {
 		}
 		defer ivfFile.Close()
 
-		udpConns := map[string]*udpConn{
-			"audio": {port: 4000, payloadType: 111},
-			"video": {port: 4002, payloadType: 96},
-		}
-
-		u, ok := udpConns[track.Kind().String()]
-		if !ok {
-			return
-		}
-
 		codecName := strings.Split(track.Codec().RTPCodecCapability.MimeType, "/")[1]
 		fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
 		buf := make([]byte, 1400)
@@ -105,7 +88,6 @@ func main() {
 			if err = rtpPacket.Unmarshal(buf[:n]); err != nil {
 				panic(err)
 			}
-			rtpPacket.PayloadType = u.payloadType
 
 			if codecName == "opus" {
 				log.Debugf("Got Opus track, saving to disk as output.opus (48 kHz, 2 channels)")
