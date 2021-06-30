@@ -36,9 +36,6 @@ func runClientLoop(addr, session string) {
 	}
 
 	config := sdk.Config{
-		Log: log.Config{
-			Level: "debug",
-		},
 		WebRTC: sdk.WebRTCTransportConfig{
 			Configuration: webrtcCfg,
 		},

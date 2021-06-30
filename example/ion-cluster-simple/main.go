@@ -28,8 +28,6 @@ func init() {
 }
 
 func main() {
-	log.Init("debug")
-
 	// parse flag
 	var session, addr string
 	flag.StringVar(&addr, "addr", "localhost:5551", "ion-cluster grpc addr")

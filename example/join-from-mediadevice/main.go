@@ -42,9 +42,6 @@ func main() {
 	}
 
 	config := sdk.Config{
-		Log: log.Config{
-			Level: "debug",
-		},
 		WebRTC: sdk.WebRTCTransportConfig{
 			Configuration: webrtcCfg,
 		},
