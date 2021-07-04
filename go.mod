@@ -23,5 +23,4 @@ require (
 	github.com/stretchr/testify v1.7.0
 	google.golang.org/grpc v1.35.0
 	google.golang.org/protobuf v1.25.0
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 )
