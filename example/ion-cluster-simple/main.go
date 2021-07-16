@@ -28,7 +28,6 @@ func init() {
 }
 
 func main() {
-	log.Init("debug")
 
 	// parse flag
 	var session, addr string
