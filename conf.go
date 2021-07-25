@@ -7,7 +7,8 @@ import (
 // Config ..
 type Config struct {
 	// WebRTC WebRTCConf `mapstructure:"webrtc"`
-	WebRTC WebRTCTransportConfig `mapstructure:"webrtc"`
+	LogLevel string                `mapstructure:"log"`
+	WebRTC   WebRTCTransportConfig `mapstructure:"webrtc"`
 }
 
 // WebRTCTransportConfig represents configuration options

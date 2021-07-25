@@ -46,6 +46,38 @@ type Call struct {
 	Audio    bool   `json:"audio"`
 }
 
+type TrackState int32
+
+// track state
+const (
+	TrackNone   TrackState = 0
+	TrackAdd    TrackState = 1
+	TrackRemove TrackState = 2
+)
+
+// Simulcast info
+type Simulcast struct {
+	Rid        string
+	Direction  string
+	Parameters string
+}
+
+// Track info
+type Track struct {
+	ID        string
+	StreamID  string
+	Kind      string
+	Muted     bool
+	Simulcast []Simulcast
+}
+
+// TrackEvent info
+type TrackEvent struct {
+	State  TrackState
+	Uid    string
+	Tracks []Track
+}
+
 // Client a sdk client
 type Client struct {
 	uid    string
@@ -59,6 +91,8 @@ type Client struct {
 	OnTrack       func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver)
 	OnDataChannel func(*webrtc.DataChannel)
 	OnError       func(error)
+	OnTrackEvent  func(event TrackEvent)
+	OnSpeaker     func(event []string)
 
 	producer *WebMProducer
 	recvByte int
@@ -97,6 +131,8 @@ func NewClient(engine *Engine, addr string, cid string) (*Client, error) {
 	c.signal.OnNegotiate = c.Negotiate
 	c.signal.OnTrickle = c.Trickle
 	c.signal.OnSetRemoteSDP = c.SetRemoteSDP
+	c.signal.OnTrackEvent = c.TrackEvent
+	c.signal.OnSpeaker = c.Speaker
 	c.signal.OnError = func(err error) {
 		if c.OnError != nil {
 			c.OnError(err)
@@ -210,15 +246,20 @@ func (c *Client) Join(sid string, config *JoinConfig) error {
 		}
 	})
 
-	offer, err := c.pub.pc.CreateOffer(nil)
+	err := c.signal.Join(sid, c.uid, config)
 	if err != nil {
 		return err
 	}
-	err = c.pub.pc.SetLocalDescription(offer)
-	if err != nil {
-		return err
-	}
-	err = c.signal.Join(sid, c.uid, offer, config)
+
+	// offer, err := c.pub.pc.CreateOffer(nil)
+	// if err != nil {
+	// return err
+	// }
+	// err = c.pub.pc.SetLocalDescription(offer)
+	// if err != nil {
+	// return err
+	// }
+	// err = c.signal.Offer(offer)
 	return err
 }
 
@@ -484,4 +525,24 @@ func (c *Client) Simulcast(layer string) {
 		log.Debugf("id=%v simulcast remote streamid=%v", c.uid, streamId)
 		c.selectRemote(streamId, layer, true)
 	}
+}
+
+func (c *Client) Subscribe(trackIds []string, enabled bool) error {
+	return c.signal.Subscribe(trackIds, enabled)
+}
+
+func (c *Client) TrackEvent(event TrackEvent) {
+	if c.OnTrackEvent == nil {
+		log.Errorf("c.OnTrackEvent == nil")
+		return
+	}
+	c.OnTrackEvent(event)
+}
+
+func (c *Client) Speaker(event []string) {
+	if c.OnSpeaker == nil {
+		log.Errorf("c.OnSpeaker == nil")
+		return
+	}
+	c.OnSpeaker(event)
 }

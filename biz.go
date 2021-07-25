@@ -159,75 +159,75 @@ func (c *BizClient) bizSignalReadLoop() error {
 
 		log.Debugf("BizClient.bizSignalReadLoop reply %v", res)
 
-		switch payload := res.Payload.(type) {
-		case *biz.SignalReply_JoinReply:
-			reply := payload.JoinReply
-			if c.OnJoin != nil {
-				c.OnJoin(reply.Success, reply.GetReason())
-			}
-		case *biz.SignalReply_LeaveReply:
-			reply := payload.LeaveReply
-			if c.OnLeave != nil {
-				c.OnLeave(reply.Reason)
-			}
-		case *biz.SignalReply_Msg:
-			msg := payload.Msg
-			data := make(map[string]interface{})
+		// switch payload := res.Payload.(type) {
+		// case *biz.SignalReply_JoinReply:
+		// reply := payload.JoinReply
+		// if c.OnJoin != nil {
+		// c.OnJoin(reply.Success, reply.GetReason())
+		// }
+		// case *biz.SignalReply_LeaveReply:
+		// reply := payload.LeaveReply
+		// if c.OnLeave != nil {
+		// c.OnLeave(reply.Reason)
+		// }
+		// case *biz.SignalReply_Msg:
+		// msg := payload.Msg
+		// data := make(map[string]interface{})
 
-			err := json.Unmarshal(msg.Data, &data)
-			if err != nil {
-				log.Errorf("Unmarshal peer.info: err %v", err)
-				c.OnError(err)
-				return err
-			}
+		// err := json.Unmarshal(msg.Data, &data)
+		// if err != nil {
+		// log.Errorf("Unmarshal peer.info: err %v", err)
+		// c.OnError(err)
+		// return err
+		// }
 
-			if c.OnMessage != nil {
-				c.OnMessage(msg.From, msg.To, data)
-			}
-		case *biz.SignalReply_PeerEvent:
-			event := payload.PeerEvent
-			info := make(map[string]interface{})
+		// if c.OnMessage != nil {
+		// c.OnMessage(msg.From, msg.To, data)
+		// }
+		// case *biz.SignalReply_PeerEvent:
+		// event := payload.PeerEvent
+		// info := make(map[string]interface{})
 
-			if event.State == ion.PeerEvent_JOIN ||
-				event.State == ion.PeerEvent_UPDATE {
-				err := json.Unmarshal(event.Peer.Info, &info)
-				if err != nil {
-					log.Errorf("Unmarshal peer.info: err %v", err)
-					c.OnError(err)
-					return err
-				}
-			}
+		// if event.State == ion.PeerEvent_JOIN ||
+		// event.State == ion.PeerEvent_UPDATE {
+		// err := json.Unmarshal(event.Peer.Info, &info)
+		// if err != nil {
+		// log.Errorf("Unmarshal peer.info: err %v", err)
+		// c.OnError(err)
+		// return err
+		// }
+		// }
 
-			if c.OnPeerEvent != nil {
-				c.OnPeerEvent(PeerState(event.State), Peer{
-					Sid:  event.Peer.Sid,
-					Uid:  event.Peer.Uid,
-					Info: info,
-				})
-			}
-		case *biz.SignalReply_StreamEvent:
-			event := payload.StreamEvent
-			if c.OnStreamEvent != nil {
-				var streams []*Stream
-				for _, st := range event.Streams {
-					stream := &Stream{
-						Id: st.Id,
-					}
-					for _, t := range st.Tracks {
-						track := &Track{
-							Id:        t.Id,
-							Label:     t.Label,
-							Kind:      t.Kind,
-							Simulcast: t.Simulcast,
-						}
-						stream.Tracks = append(stream.Tracks, track)
-					}
-					streams = append(streams, stream)
-				}
-				c.OnStreamEvent(StreamState(event.State), event.Sid, event.Uid, streams)
-			}
-		default:
-			break
-		}
+		// if c.OnPeerEvent != nil {
+		// c.OnPeerEvent(PeerState(event.State), Peer{
+		// Sid:  event.Peer.Sid,
+		// Uid:  event.Peer.Uid,
+		// Info: info,
+		// })
+		// }
+		// case *biz.SignalReply_StreamEvent:
+		// event := payload.StreamEvent
+		// if c.OnStreamEvent != nil {
+		// var streams []*Stream
+		// for _, st := range event.Streams {
+		// stream := &Stream{
+		// Id: st.Id,
+		// }
+		// for _, t := range st.Tracks {
+		// track := &Track{
+		// Id:        t.Id,
+		// Label:     t.Label,
+		// Kind:      t.Kind,
+		// Simulcast: t.Simulcast,
+		// }
+		// stream.Tracks = append(stream.Tracks, track)
+		// }
+		// streams = append(streams, stream)
+		// }
+		// c.OnStreamEvent(StreamState(event.State), event.Sid, event.Uid, streams)
+		// }
+		// default:
+		// break
+		// }
 	}
 }

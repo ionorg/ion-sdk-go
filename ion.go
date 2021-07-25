@@ -23,12 +23,12 @@ type PeerEvent struct {
 	Peer  Peer
 }
 
-type Track struct {
-	Id        string
-	Label     string
-	Kind      string
-	Simulcast map[string]string
-}
+// type Track struct {
+// Id        string
+// Label     string
+// Kind      string
+// Simulcast map[string]string
+// }
 
 type Stream struct {
 	Id     string

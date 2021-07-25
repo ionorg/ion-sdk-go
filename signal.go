@@ -3,11 +3,13 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"sync"
 	"time"
 
-	pb "github.com/pion/ion-sfu/cmd/signal/grpc/proto"
+	// pb "github.com/pion/ion-sfu/cmd/signal/grpc/proto"
+	pb "github.com/pion/ion/proto/rtc"
 	"github.com/pion/webrtc/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -17,13 +19,16 @@ import (
 // Signal is a wrapper of grpc
 type Signal struct {
 	id     string
-	client pb.SFUClient
-	stream pb.SFU_SignalClient
+	client pb.RTCClient
+	stream pb.RTC_SignalClient
 
 	OnNegotiate    func(webrtc.SessionDescription) error
 	OnTrickle      func(candidate webrtc.ICECandidateInit, target int)
 	OnSetRemoteSDP func(webrtc.SessionDescription) error
 	OnError        func(error)
+
+	OnTrackEvent func(event TrackEvent)
+	OnSpeaker    func(event []string)
 
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -36,7 +41,7 @@ func NewSignal(addr, id string) (*Signal, error) {
 	s := &Signal{}
 	s.id = id
 	// Set up a connection to the sfu server.
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithInsecure())
 	if err != nil {
@@ -46,7 +51,7 @@ func NewSignal(addr, id string) (*Signal, error) {
 	log.Infof("[%v] Connecting to sfu ok: %s", s.id, addr)
 
 	s.ctx, s.cancel = context.WithCancel(context.Background())
-	s.client = pb.NewSFUClient(conn)
+	s.client = pb.NewRTCClient(conn)
 	s.stream, err = s.client.Signal(s.ctx)
 	if err != nil {
 		log.Errorf("err=%v", err)
@@ -69,7 +74,7 @@ func (s *Signal) onSignalHandleOnce() {
 func (s *Signal) onSignalHandle() error {
 	for {
 		//only one goroutine for recving from stream, no need to lock
-		res, err := s.stream.Recv()
+		stream, err := s.stream.Recv()
 		if err != nil {
 			if err == io.EOF {
 				log.Infof("[%v] WebRTC Transport Closed", s.id)
@@ -91,28 +96,28 @@ func (s *Signal) onSignalHandle() error {
 			return err
 		}
 
-		switch payload := res.Payload.(type) {
-		case *pb.SignalReply_Join:
-			// Set the remote SessionDescription
-			log.Infof("[%v] [join] got answer: %s", s.id, payload.Join.Description)
-
-			var sdp webrtc.SessionDescription
-			err := json.Unmarshal(payload.Join.Description, &sdp)
-			if err != nil {
-				log.Errorf("[%v] [join] sdp unmarshal error: %v", s.id, err)
+		switch payload := stream.Payload.(type) {
+		case *pb.Signalling_Reply:
+			// now not have answer in join
+			success := payload.Reply.Success
+			err := errors.New(payload.Reply.Error.String())
+			log.Infof("success=%v err=%v", success, err)
+			if !success {
+				log.Errorf("[%v] [join] failed error: %v", s.id, err)
 				return err
 			}
-
-			if err = s.OnSetRemoteSDP(sdp); err != nil {
-				log.Errorf("[%v] [join] s.OnSetRemoteSDP error %s", s.id, err)
-				return err
+			log.Infof("[%v] [join] success", s.id)
+		case *pb.Signalling_Description:
+			log.Infof("payload.Description==%+v", payload.Description)
+			var sdpType webrtc.SDPType
+			if payload.Description.Type == "offer" {
+				sdpType = webrtc.SDPTypeOffer
+			} else {
+				sdpType = webrtc.SDPTypeAnswer
 			}
-		case *pb.SignalReply_Description:
-			var sdp webrtc.SessionDescription
-			err := json.Unmarshal(payload.Description, &sdp)
-			if err != nil {
-				log.Errorf("[%v] [description] sdp unmarshal error: %v", s.id, err)
-				return err
+			sdp := webrtc.SessionDescription{
+				SDP:  payload.Description.Sdp,
+				Type: sdpType,
 			}
 			if sdp.Type == webrtc.SDPTypeOffer {
 				log.Infof("[%v] [description] got offer call s.OnNegotiate sdp=%+v", s.id, sdp)
@@ -127,36 +132,67 @@ func (s *Signal) onSignalHandle() error {
 					log.Errorf("[%v] [description] s.OnSetRemoteSDP err=%s", s.id, err)
 				}
 			}
-		case *pb.SignalReply_Trickle:
+		case *pb.Signalling_Trickle:
 			var candidate webrtc.ICECandidateInit
 			_ = json.Unmarshal([]byte(payload.Trickle.Init), &candidate)
 			log.Infof("[%v] [trickle] type=%v candidate=%v", s.id, payload.Trickle.Target, candidate)
 			s.OnTrickle(candidate, int(payload.Trickle.Target))
+		case *pb.Signalling_TrackEvent:
+			state := TrackNone
+			switch payload.TrackEvent.State {
+			case pb.TrackEvent_ADD:
+				state = TrackAdd
+			case pb.TrackEvent_REMOVE:
+				state = TrackRemove
+			}
+			var tracks []Track
+			for _, track := range payload.TrackEvent.Tracks {
+				var simulcast []Simulcast
+				for _, s := range track.Simulcast {
+					simulcast = append(simulcast, Simulcast{
+						Rid:        s.Rid,
+						Direction:  s.Direction,
+						Parameters: s.Parameters,
+					})
+				}
+				tracks = append(tracks, Track{
+					ID:        track.Id,
+					StreamID:  track.StreamId,
+					Kind:      track.Kind,
+					Muted:     track.Muted,
+					Simulcast: simulcast,
+				})
+			}
+			trackEvent := TrackEvent{
+				State:  state,
+				Uid:    payload.TrackEvent.Uid,
+				Tracks: tracks,
+			}
+			if s.OnTrackEvent == nil {
+				log.Errorf("s.OnTrackEvent == nil")
+				continue
+			}
+			log.Infof("s.OnTrackEvent trackEvent=%+v", trackEvent)
+			s.OnTrackEvent(trackEvent)
 		default:
-			// log.Errorf("Unknow signal type!!!!%v", payload)
+			log.Errorf("Unknow signal type!!!!%v", payload)
 		}
 	}
 }
 
-func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription, config *JoinConfig) error {
-	log.Infof("[%v] [Signal.Join] sid=%v offer=%v", s.id, sid, offer)
-	marshalled, err := json.Marshal(offer)
-	if err != nil {
-		return err
-	}
+func (s *Signal) Join(sid string, uid string, config *JoinConfig) error {
+	log.Infof("[%v] [Signal.Join] sid=%v", s.id, sid)
 	go s.onSignalHandleOnce()
 	s.Lock()
 	if config == nil {
 		config = NewJoinConfig()
 	}
-	err = s.stream.Send(
-		&pb.SignalRequest{
-			Payload: &pb.SignalRequest_Join{
+	err := s.stream.Send(
+		&pb.Signalling{
+			Payload: &pb.Signalling_Join{
 				Join: &pb.JoinRequest{
-					Sid:         sid,
-					Uid:         uid,
-					Description: marshalled,
-					Config:      *config,
+					Sid: sid,
+					Uid: uid,
 				},
 			},
 		},
@@ -177,61 +213,91 @@ func (s *Signal) Trickle(candidate *webrtc.ICECandidate, target int) {
 	}
 	go s.onSignalHandleOnce()
 	s.Lock()
-	err = s.stream.Send(&pb.SignalRequest{
-		Payload: &pb.SignalRequest_Trickle{
-			Trickle: &pb.Trickle{
-				Init:   string(bytes),
-				Target: pb.Trickle_Target(target),
+	err = s.stream.Send(
+		&pb.Signalling{
+			Payload: &pb.Signalling_Trickle{
+				Trickle: &pb.Trickle{
+					Target: pb.Target_PUBLISHER,
+					Init:   string(bytes),
+				},
 			},
 		},
-	})
+	)
 	s.Unlock()
 	if err != nil {
 		log.Errorf("[%v] err=%v", s.id, err)
 	}
 }
 
-func (s *Signal) Offer(sdp webrtc.SessionDescription) {
+func (s *Signal) Offer(sdp webrtc.SessionDescription) error {
 	log.Infof("[%v] [Signal.Offer] sdp=%v", s.id, sdp)
-	marshalled, err := json.Marshal(sdp)
-	if err != nil {
-		log.Errorf("[%v] err=%v", s.id, err)
-		return
-	}
 	go s.onSignalHandleOnce()
 	s.Lock()
-	err = s.stream.Send(
-		&pb.SignalRequest{
-			Payload: &pb.SignalRequest_Description{
-				Description: marshalled,
+	err := s.stream.Send(
+		&pb.Signalling{
+			Payload: &pb.Signalling_Description{
+				Description: &pb.SessionDescription{
+					Target: pb.Target_PUBLISHER,
+					Type:   "offer",
+					Sdp:    sdp.SDP,
+				},
 			},
 		},
 	)
 	s.Unlock()
 	if err != nil {
 		log.Errorf("[%v] err=%v", s.id, err)
+		return err
 	}
+	return nil
 }
 
-func (s *Signal) Answer(sdp webrtc.SessionDescription) {
+func (s *Signal) Answer(sdp webrtc.SessionDescription) error {
 	log.Infof("[%v] [Signal.Answer] sdp=%v", s.id, sdp)
-	marshalled, err := json.Marshal(sdp)
-	if err != nil {
-		log.Errorf("err=%v", err)
-		return
-	}
 	s.Lock()
-	err = s.stream.Send(
-		&pb.SignalRequest{
-			Payload: &pb.SignalRequest_Description{
-				Description: marshalled,
+	err := s.stream.Send(
+		&pb.Signalling{
+			Payload: &pb.Signalling_Description{
+				Description: &pb.SessionDescription{
+					Target: pb.Target_SUBSCRIBER,
+					Type:   "answer",
+					Sdp:    sdp.SDP,
+				},
 			},
 		},
 	)
 	s.Unlock()
 	if err != nil {
 		log.Errorf("[%v] err=%v", s.id, err)
+		return err
 	}
+	return nil
+}
+
+// Subscribe to tracks
+func (s *Signal) Subscribe(trackIds []string, enable bool) error {
+	if len(trackIds) == 0 {
+		return errors.New("track id is empty")
+	}
+	err := s.stream.Send(
+		&pb.Signalling{
+			Payload: &pb.Signalling_UpdateSettings{
+				UpdateSettings: &pb.UpdateSettings{
+					Command: &pb.UpdateSettings_Subcription{
+						Subcription: &pb.Subscription{
+							TrackIds:  trackIds,
+							Subscribe: enable,
+						},
+					},
+				},
+			},
+		},
+	)
+	return err
+}
+
+func (s *Signal) TrackEvent(event TrackEvent) {
+
 }
 
 func (s *Signal) Close() {

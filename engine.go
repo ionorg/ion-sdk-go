@@ -9,10 +9,11 @@ import (
 	_ "net/http/pprof"
 
 	ilog "github.com/pion/ion-log"
+	"github.com/sirupsen/logrus"
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "engine", nil)
+	log *logrus.Logger
 )
 
 // Engine a sdk engine
@@ -29,6 +30,8 @@ func NewEngine(cfg Config) *Engine {
 		clients: make(map[string]map[string]*Client),
 	}
 	e.cfg = cfg
+	ilog.Init(cfg.LogLevel)
+	log = ilog.NewLoggerWithFields(ilog.StringToLevel(cfg.LogLevel), "engine", nil)
 
 	return e
 }

@@ -34,24 +34,28 @@ func saveToDisk(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	for {
 		rtpPacket, _, err := track.ReadRTP()
 		if err != nil {
-			panic(err)
+			log.Warnf("track.ReadRTP error: %v", err)
+			continue
 		}
 		if err := fileWriter.WriteRTP(rtpPacket); err != nil {
-			panic(err)
+			log.Warnf("fileWriter.WriteRTP error: %v", err)
+			continue
 		}
 	}
 }
 
 func main() {
-	// init log
-	log.Init("debug")
 
 	// parse flag
-	var session, addr, file string
+	var session, addr, file, logLevel string
 	flag.StringVar(&file, "file", "", "Path to the file media")
-	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test session", "join session name")
+	flag.StringVar(&addr, "addr", "localhost:5551", "Ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
+	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.Parse()
+
+	// init log
+	log.Init(logLevel)
 
 	// add stun servers
 	webrtcCfg := webrtc.Configuration{
@@ -79,6 +83,19 @@ func main() {
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
 	c.OnTrack = saveToDisk
+	c.OnTrackEvent = func(event sdk.TrackEvent) {
+		log.Infof("OnTrackEvent: %+v", event)
+		if event.State == sdk.TrackAdd {
+			var trackIds []string
+			for _, track := range event.Tracks {
+				trackIds = append(trackIds, track.ID)
+			}
+			err := c.Subscribe(trackIds, true)
+			if err != nil {
+				log.Errorf("Subscribe trackIds=%v error: %v", trackIds, err)
+			}
+		}
+	}
 
 	// client join a session
 	err = c.Join(session, nil)
