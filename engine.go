@@ -8,39 +8,90 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/lucsky/cuid"
 	ilog "github.com/pion/ion-log"
+	"github.com/pion/webrtc/v3"
 	"github.com/sirupsen/logrus"
 )
 
 var (
-	log *logrus.Logger
+	log           *logrus.Logger
+	DefaultConfig = Config{
+		LogLevel: "info",
+		WebRTC: WebRTCTransportConfig{
+			Configuration: webrtc.Configuration{
+				ICEServers: []webrtc.ICEServer{
+					webrtc.ICEServer{
+						URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
+					},
+				},
+			},
+		},
+	}
 )
+
+func init() {
+	ilog.Init(DefaultConfig.LogLevel)
+	log = ilog.NewLoggerWithFields(ilog.StringToLevel(DefaultConfig.LogLevel), "engine", nil)
+}
 
 // Engine a sdk engine
 type Engine struct {
-	cfg Config
-
 	sync.RWMutex
 	clients map[string]map[string]*Client
 }
 
 // NewEngine create a engine
-func NewEngine(cfg Config) *Engine {
+func NewEngine() *Engine {
 	e := &Engine{
 		clients: make(map[string]map[string]*Client),
 	}
-	e.cfg = cfg
-	ilog.Init(cfg.LogLevel)
-	log = ilog.NewLoggerWithFields(ilog.StringToLevel(cfg.LogLevel), "engine", nil)
-
 	return e
 }
 
-// AddClient add a client
+// NewClient create a sdk client
+func (e *Engine) NewClient(addr string, cid ...string) (*Client, error) {
+	uid := cid[0]
+	if uid == "" {
+		uid = cuid.New()
+	}
+
+	s, err := NewSignal(addr, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	c := &Client{
+		engine:         e,
+		uid:            uid,
+		signal:         s,
+		notify:         make(chan struct{}),
+		remoteStreamId: make(map[string]string),
+	}
+
+	c.signal.OnNegotiate = c.negotiate
+	c.signal.OnTrickle = c.trickle
+	c.signal.OnSetRemoteSDP = c.setRemoteSDP
+	c.signal.OnTrackEvent = c.trackEvent
+	c.signal.OnSpeaker = c.speaker
+	c.signal.OnError = func(err error) {
+		if c.OnError != nil {
+			c.OnError(err)
+		}
+	}
+
+	c.pub = NewTransport(PUBLISHER, c.signal)
+	c.sub = NewTransport(SUBSCRIBER, c.signal)
+
+	e.addClient(c)
+	return c, nil
+}
+
+// addClient add a client
 // addr: grpc addr
 // sid: session/room id
 // cid: client id
-func (e *Engine) AddClient(c *Client) error {
+func (e *Engine) addClient(c *Client) {
 	e.Lock()
 	defer e.Unlock()
 	if e.clients[c.sid] == nil {
@@ -48,28 +99,20 @@ func (e *Engine) AddClient(c *Client) error {
 	}
 
 	e.clients[c.sid][c.uid] = c
-	if c == nil {
-		err := fmt.Errorf("client is nil")
-		log.Errorf("%v", err)
-		return err
-	}
-
-	return nil
 }
 
-// DelClient delete a client
-func (e *Engine) DelClient(c *Client) error {
+// delClient delete a client
+func (e *Engine) delClient(c *Client) {
 	e.Lock()
 	if e.clients[c.sid] == nil {
 		e.Unlock()
-		return errInvalidSessID
+		log.Errorf("error: %v", errInvalidSessID)
 	}
 	if c, ok := e.clients[c.sid][c.uid]; ok && (c != nil) {
 		c.Close()
 	}
 	delete(e.clients[c.sid], c.uid)
 	e.Unlock()
-	return nil
 }
 
 // Stats show a total stats to console: clients and bandwidth

@@ -24,26 +24,13 @@ func main() {
 
 	log := ilog.NewLogger(ilog.StringToLevel(logLevel), "main")
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
-	}
-
-	config := sdk.Config{
-		LogLevel: logLevel,
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
-	}
 	// new sdk engine
-	e := sdk.NewEngine(config)
+	sdk.DefaultConfig.WebRTC.VideoMime = sdk.MimeTypeVP8
+	sdk.DefaultConfig.LogLevel = "info"
+	e := sdk.NewEngine()
 
 	// get a client from engine
-	c, err := sdk.NewClient(e, addr, "client id")
+	c, err := e.NewClient(addr, "ion-sdk-go")
 	if err != nil {
 		log.Errorf("sdk.NewClient error : %v", err)
 		return
@@ -63,28 +50,7 @@ func main() {
 		}
 	}
 
-	peerConnection := c.GetPubTransport().GetPeerConnection()
-
-	peerConnection.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
-		log.Infof("Connection state changed: %s", state)
-	})
-
-	if err != nil {
-		log.Errorf("client err=%v", err)
-		panic(err)
-	}
-
-	err = e.AddClient(c)
-	if err != nil {
-		return
-	}
-
 	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: "video/vp8"}, "video", "pion2")
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = peerConnection.AddTrack(videoTrack)
 	if err != nil {
 		panic(err)
 	}
@@ -93,18 +59,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	_, err = peerConnection.AddTrack(audioTrack)
-	if err != nil {
-		panic(err)
-	}
-
 	// client join a session
-	err = c.Join(session, nil)
+	err = c.Join(session)
 
 	if err != nil {
 		log.Errorf("join err=%v", err)
 		panic(err)
 	}
+	_, _ = c.Publish(videoTrack, audioTrack)
 
 	// Start pushing buffers on these tracks
 	gst.CreatePipeline("opus", []*webrtc.TrackLocalStaticSample{audioTrack}, *audioSrc).Start()

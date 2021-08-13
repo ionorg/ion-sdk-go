@@ -17,24 +17,23 @@ type Transport struct {
 }
 
 // NewTransport create a transport
-func NewTransport(role int, signal *Signal, cfg WebRTCTransportConfig) *Transport {
+func NewTransport(role int, signal *Signal) *Transport {
 	t := &Transport{
 		role:   role,
 		signal: signal,
-		config: cfg,
 	}
 
 	var err error
 	var api *webrtc.API
 	var me *webrtc.MediaEngine
-	cfg.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
+	DefaultConfig.WebRTC.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
 	if role == PUBLISHER {
-		me, err = getPublisherMediaEngine(cfg.VideoMime)
+		me, err = getPublisherMediaEngine(DefaultConfig.WebRTC.VideoMime)
 	} else {
 		me, err = getSubscriberMediaEngine()
 	}
-	api = webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(cfg.Setting))
-	t.pc, err = api.NewPeerConnection(cfg.Configuration)
+	api = webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(DefaultConfig.WebRTC.Setting))
+	t.pc, err = api.NewPeerConnection(DefaultConfig.WebRTC.Configuration)
 
 	if err != nil {
 		log.Errorf("NewPeerConnection error: %v", err)
@@ -61,10 +60,10 @@ func NewTransport(role int, signal *Signal, cfg WebRTCTransportConfig) *Transpor
 			t.SendCandidates = append(t.SendCandidates, c)
 		} else {
 			for _, cand := range t.SendCandidates {
-				t.signal.Trickle(cand, role)
+				t.signal.trickle(cand, role)
 			}
 			t.SendCandidates = []*webrtc.ICECandidate{}
-			t.signal.Trickle(c, role)
+			t.signal.trickle(c, role)
 		}
 	})
 	return t

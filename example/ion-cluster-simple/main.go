@@ -17,7 +17,7 @@ import (
 
 var (
 	log  = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-cluster", nil)
-	info = map[string]interface{}{"name": "bizclient"}
+	info = map[string]interface{}{"name": "room-client"}
 	uid  = cuid.New()
 )
 
@@ -41,28 +41,28 @@ func main() {
 		log.Errorf("OnError %v", err)
 	}
 
-	connector.OnJoin = func(success bool, reason string) {
-		log.Infof("OnJoin success = %v, reason = %v", success, reason)
+	connector.OnJoin = func(success bool, info sdk.RoomInfo, err error) {
+		log.Infof("OnJoin success = %v, info = %v, err = %v", success, info, err)
 	}
 
-	connector.OnLeave = func(reason string) {
-		log.Infof("OnLeave reason = %v", reason)
+	connector.OnLeave = func(success bool, err error) {
+		log.Infof("OnLeave success = %v err = %v", success, err)
 	}
 
-	connector.OnPeerEvent = func(event sdk.PeerEvent) {
-		log.Infof("OnPeerEvent peer = %v, state = %v", event.Peer, event.State)
+	connector.OnPeerEvent = func(state sdk.PeerState, peer sdk.PeerInfo) {
+		log.Infof("OnPeerEvent state = %v, peer = %v", state, peer)
 	}
 
-	connector.OnStreamEvent = func(event sdk.StreamEvent) {
-		log.Infof("StreamEvent state = %v, sid = %v, uid = %v, streams = %v",
-			event.State,
-			event.Sid,
-			event.Uid,
-			event.Streams)
+	connector.OnMessage = func(from string, to string, data map[string]interface{}) {
+		log.Infof("OnMessage from = %v, to = %v, data = %v", from, to, data)
 	}
 
-	connector.OnMessage = func(msg sdk.Message) {
-		log.Infof("OnMessage from = %v, to = %v, msg = %v", msg.From, msg.To, msg.Data)
+	connector.OnDisconnect = func(sid, reason string) {
+		log.Infof("OnDisconnect sid = %v, reason = %v", sid, reason)
+	}
+
+	connector.OnRoomInfo = func(info sdk.RoomInfo) {
+		log.Infof("OnRoomInfo info=%v", info)
 	}
 
 	// subscribe rtp from sessoin
@@ -96,10 +96,45 @@ func main() {
 		}
 	}
 
-	err := connector.Join(session)
+	// try create room
+	err := connector.CreateRoom(sdk.RoomInfo{Sid: session})
 	if err != nil {
-		log.Errorf("join err %v", err)
+		log.Error("err=%v", err)
+		return
 	}
+
+	// join room
+	// err = connector.Join(session)
+	// if err != nil {
+	// 	log.Error("err=%v", err)
+	// 	return
+	// }
+
+	// add peer
+	connector.AddPeer(sdk.PeerInfo{Sid: session, Uid: "peer1"})
+
+	// get peers
+	peers := connector.GetPeers(session)
+	log.Infof(" peers=%+v", peers)
+
+	// update peer
+	connector.UpdatePeer(sdk.PeerInfo{Sid: session, Uid: "peer1", DisplayName: "name"})
+
+	time.Sleep(3 * time.Second)
+	// remove peer
+	connector.RemovePeer(session, "peer1")
+
+	time.Sleep(3 * time.Second)
+	// lock room
+	connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: true})
+
+	time.Sleep(2 * time.Second)
+	// unlock room
+	connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: false})
+
+	time.Sleep(2 * time.Second)
+	// end room
+	connector.EndRoom(session, "conference end", true)
 
 	gst.StartMainLoop()
 }

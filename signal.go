@@ -37,7 +37,7 @@ type Signal struct {
 }
 
 // NewSignal create a grpc signaler
-func NewSignal(addr, id string) (*Signal, error) {
+func NewSignal(addr string, id string) (*Signal, error) {
 	s := &Signal{}
 	s.id = id
 	// Set up a connection to the sfu server.
@@ -107,6 +107,16 @@ func (s *Signal) onSignalHandle() error {
 				return err
 			}
 			log.Infof("[%v] [join] success", s.id)
+			log.Infof("payload.Reply.Description=%v", payload.Reply.Description)
+			sdp := webrtc.SessionDescription{
+				Type: webrtc.SDPTypeAnswer,
+				SDP:  payload.Reply.Description.Sdp,
+			}
+
+			if err = s.OnSetRemoteSDP(sdp); err != nil {
+				log.Errorf("[%v] [join] s.OnSetRemoteSDP error %s", s.id, err)
+				return err
+			}
 		case *pb.Signalling_Description:
 			log.Infof("payload.Description==%+v", payload.Description)
 			var sdpType webrtc.SDPType
@@ -180,19 +190,21 @@ func (s *Signal) onSignalHandle() error {
 	}
 }
 
-func (s *Signal) Join(sid string, uid string, config *JoinConfig) error {
+func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription) error {
 	log.Infof("[%v] [Signal.Join] sid=%v", s.id, sid)
 	go s.onSignalHandleOnce()
 	s.Lock()
-	if config == nil {
-		config = NewJoinConfig()
-	}
 	err := s.stream.Send(
 		&pb.Signalling{
 			Payload: &pb.Signalling_Join{
 				Join: &pb.JoinRequest{
 					Sid: sid,
 					Uid: uid,
+					Description: &pb.SessionDescription{
+						Target: pb.Target_PUBLISHER,
+						Type:   "offer",
+						Sdp:    offer.SDP,
+					},
 				},
 			},
 		},
@@ -204,8 +216,8 @@ func (s *Signal) Join(sid string, uid string, config *JoinConfig) error {
 	return err
 }
 
-func (s *Signal) Trickle(candidate *webrtc.ICECandidate, target int) {
-	log.Infof("[%v] [Signal.Trickle] candidate=%v target=%v", s.id, candidate, target)
+func (s *Signal) trickle(candidate *webrtc.ICECandidate, target int) {
+	log.Infof("[%v] [Signal.trickle] candidate=%v target=%v", s.id, candidate, target)
 	bytes, err := json.Marshal(candidate.ToJSON())
 	if err != nil {
 		log.Errorf("err=%v", err)
@@ -217,7 +229,7 @@ func (s *Signal) Trickle(candidate *webrtc.ICECandidate, target int) {
 		&pb.Signalling{
 			Payload: &pb.Signalling_Trickle{
 				Trickle: &pb.Trickle{
-					Target: pb.Target_PUBLISHER,
+					Target: pb.Target(target),
 					Init:   string(bytes),
 				},
 			},
@@ -229,7 +241,7 @@ func (s *Signal) Trickle(candidate *webrtc.ICECandidate, target int) {
 	}
 }
 
-func (s *Signal) Offer(sdp webrtc.SessionDescription) error {
+func (s *Signal) offer(sdp webrtc.SessionDescription) error {
 	log.Infof("[%v] [Signal.Offer] sdp=%v", s.id, sdp)
 	go s.onSignalHandleOnce()
 	s.Lock()
@@ -252,7 +264,7 @@ func (s *Signal) Offer(sdp webrtc.SessionDescription) error {
 	return nil
 }
 
-func (s *Signal) Answer(sdp webrtc.SessionDescription) error {
+func (s *Signal) answer(sdp webrtc.SessionDescription) error {
 	log.Infof("[%v] [Signal.Answer] sdp=%v", s.id, sdp)
 	s.Lock()
 	err := s.stream.Send(
@@ -283,8 +295,8 @@ func (s *Signal) Subscribe(trackIds []string, enable bool) error {
 		&pb.Signalling{
 			Payload: &pb.Signalling_UpdateSettings{
 				UpdateSettings: &pb.UpdateSettings{
-					Command: &pb.UpdateSettings_Subcription{
-						Subcription: &pb.Subscription{
+					Command: &pb.UpdateSettings_Subscription{
+						Subscription: &pb.Subscription{
 							TrackIds:  trackIds,
 							Subscribe: enable,
 						},
@@ -294,10 +306,6 @@ func (s *Signal) Subscribe(trackIds []string, enable bool) error {
 		},
 	)
 	return err
-}
-
-func (s *Signal) TrackEvent(event TrackEvent) {
-
 }
 
 func (s *Signal) Close() {

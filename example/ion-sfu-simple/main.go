@@ -35,11 +35,11 @@ func saveToDisk(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		rtpPacket, _, err := track.ReadRTP()
 		if err != nil {
 			log.Warnf("track.ReadRTP error: %v", err)
-			continue
+			break
 		}
 		if err := fileWriter.WriteRTP(rtpPacket); err != nil {
 			log.Warnf("fileWriter.WriteRTP error: %v", err)
-			continue
+			break
 		}
 	}
 }
@@ -57,60 +57,34 @@ func main() {
 	// init log
 	log.Init(logLevel)
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
-	}
-
-	config := sdk.Config{
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
-	}
 	// new sdk engine
-	e := sdk.NewEngine(config)
+	e := sdk.NewEngine()
 
 	// create a new client from engine
-	c, err := sdk.NewClient(e, addr, "client id")
+	c, err := e.NewClient(addr, "ion-sdk-go")
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return
 	}
-	// subscribe rtp from sessoin
-	// comment this if you don't need save to file
+	// user define receiving rtp
 	c.OnTrack = saveToDisk
-	c.OnTrackEvent = func(event sdk.TrackEvent) {
-		log.Infof("OnTrackEvent: %+v", event)
-		if event.State == sdk.TrackAdd {
-			var trackIds []string
-			for _, track := range event.Tracks {
-				trackIds = append(trackIds, track.ID)
-			}
-			err := c.Subscribe(trackIds, true)
-			if err != nil {
-				log.Errorf("Subscribe trackIds=%v error: %v", trackIds, err)
-			}
-		}
-	}
+
+	// user define subscription, default: subscribe all track event
+	// c.OnTrackEvent = func(event sdk.TrackEvent) {
+	// }
 
 	// client join a session
-	err = c.Join(session, nil)
+	err = c.Join(session)
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return
 	}
 
 	// publish file to session if needed
-	if file != "" {
-		err = c.PublishWebm(file, true, true)
-		if err != nil {
-			log.Errorf("err=%v", err)
-			return
-		}
+	err = c.PublishFile(file, true, true)
+	if err != nil {
+		log.Errorf("err=%v", err)
+		return
 	}
 
 	select {}
