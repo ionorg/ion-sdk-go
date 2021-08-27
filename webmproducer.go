@@ -170,7 +170,6 @@ func (t *WebMProducer) readLoop() {
 
 		// Handle actual seek
 		if seekDuration > -1 && math.Abs(float64((pck.Timecode-seekDuration).Milliseconds())) < 30.0 {
-			log.Infof("Seek happened!!!!")
 			startTime = time.Now().Add(-seekDuration)
 			seekDuration = time.Duration(-1)
 			continue

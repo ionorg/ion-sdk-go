@@ -10,19 +10,19 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-var ()
+var (
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-sfu-gstreamer-send", nil)
+)
 
 func main() {
 	// parse flag
 	var session, addr, logLevel string
-	flag.StringVar(&addr, "addr", "localhost:5551", "Ion-sfu grpc addr")
+	flag.StringVar(&addr, "addr", "localhost:5551", "ion-sfu grpc addr")
 	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.StringVar(&logLevel, "log", "info", "log level:debug|info|warn|error")
 	audioSrc := flag.String("audio-src", "audiotestsrc", "GStreamer audio src")
 	videoSrc := flag.String("video-src", "videotestsrc", "GStreamer video src")
 	flag.Parse()
-
-	log := ilog.NewLogger(ilog.StringToLevel(logLevel), "main")
 
 	// new sdk engine
 	sdk.DefaultConfig.WebRTC.VideoMime = sdk.MimeTypeVP8
@@ -30,7 +30,7 @@ func main() {
 	e := sdk.NewEngine()
 
 	// get a client from engine
-	c, err := e.NewClient(addr, "ion-sdk-go")
+	c, err := e.NewClient(addr)
 	if err != nil {
 		log.Errorf("sdk.NewClient error : %v", err)
 		return
@@ -38,10 +38,10 @@ func main() {
 
 	c.OnTrackEvent = func(event sdk.TrackEvent) {
 		log.Infof("OnTrackEvent: %+v", event)
-		if event.State == sdk.TrackAdd {
+		if event.State == sdk.TrackEvent_ADD {
 			var trackIds []string
 			for _, track := range event.Tracks {
-				trackIds = append(trackIds, track.ID)
+				trackIds = append(trackIds, track.Id)
 			}
 			err := c.Subscribe(trackIds, true)
 			if err != nil {

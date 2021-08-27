@@ -26,36 +26,34 @@ func run(e *sdk.Engine, addr, session, file, role string, total, duration, cycle
 		case "pubsub":
 			cid := fmt.Sprintf("%s_pubsub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
-			c, err := sdk.NewClient(e, addr, cid)
+			c, err := e.NewClient(addr, cid)
 			if err != nil {
 				log.Errorf("%v", err)
 				break
 			}
-			config := sdk.NewJoinConfig()
-			c.Join(session, config)
-			c.PublishWebm(file, video, audio)
+			c.Join(session)
+			c.PublishFile(file, video, audio)
 			c.Simulcast(simulcast)
 		case "sub":
 			cid := fmt.Sprintf("%s_sub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
-			c, err := sdk.NewClient(e, addr, cid)
+			c, err := e.NewClient(addr, cid)
 			if err != nil {
 				log.Errorf("%v", err)
 				break
 			}
-			config := sdk.NewJoinConfig().SetNoPublish()
-			c.Join(session, config)
+			c.Join(session)
 			c.Simulcast(simulcast)
 		case "pub":
 			cid := fmt.Sprintf("%s_pub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
-			c, err := sdk.NewClient(e, addr, cid)
+			c, err := e.NewClient(addr, cid)
 			if err != nil {
 				log.Errorf("%v", err)
 				break
 			}
-			config := sdk.NewJoinConfig().SetNoSubscribe()
-			c.Join(session, config)
+
+			c.Join(session)
 			c.Simulcast(simulcast)
 		default:
 			log.Errorf("invalid role! should be pubsub/sub/pub")
@@ -76,8 +74,8 @@ func main() {
 	var video, audio bool
 
 	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
-	flag.StringVar(&gaddr, "gaddr", "", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test", "join session name")
+	flag.StringVar(&gaddr, "gaddr", "localhost:5551", "ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.IntVar(&total, "clients", 1, "Number of clients to start")
 	flag.IntVar(&cycle, "cycle", 1000, "Run new client cycle in ms")
 	flag.IntVar(&duration, "duration", 3600, "Running duration in sencond")
@@ -101,6 +99,7 @@ func main() {
 
 	se := webrtc.SettingEngine{}
 	se.SetEphemeralUDPPortRange(10000, 15000)
+
 	webrtcCfg := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			webrtc.ICEServer{
@@ -108,18 +107,19 @@ func main() {
 			},
 		},
 	}
-	config := sdk.Config{
-		WebRTC: sdk.WebRTCTransportConfig{
-			VideoMime:     "video/vp8",
-			Setting:       se,
-			Configuration: webrtcCfg,
-		},
+
+	sdk.DefaultConfig.WebRTC = sdk.WebRTCTransportConfig{
+		VideoMime:     "video/vp8",
+		Setting:       se,
+		Configuration: webrtcCfg,
 	}
+
 	if gaddr == "" {
 		log.Errorf("gaddr is \"\"!")
 		return
 	}
-	e := sdk.NewEngine(config)
+
+	e := sdk.NewEngine()
 	if paddr != "" {
 		go e.ServePProf(paddr)
 	}

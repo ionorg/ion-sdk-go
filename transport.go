@@ -10,14 +10,14 @@ type Transport struct {
 	api            *webrtc.DataChannel
 	signal         *Signal
 	pc             *webrtc.PeerConnection
-	role           int
+	role           Target
 	config         WebRTCTransportConfig
 	SendCandidates []*webrtc.ICECandidate
 	RecvCandidates []webrtc.ICECandidateInit
 }
 
 // NewTransport create a transport
-func NewTransport(role int, signal *Signal) *Transport {
+func NewTransport(role Target, signal *Signal) *Transport {
 	t := &Transport{
 		role:   role,
 		signal: signal,
@@ -27,7 +27,7 @@ func NewTransport(role int, signal *Signal) *Transport {
 	var api *webrtc.API
 	var me *webrtc.MediaEngine
 	DefaultConfig.WebRTC.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
-	if role == PUBLISHER {
+	if role == Target_PUBLISHER {
 		me, err = getPublisherMediaEngine(DefaultConfig.WebRTC.VideoMime)
 	} else {
 		me, err = getSubscriberMediaEngine()
@@ -40,7 +40,7 @@ func NewTransport(role int, signal *Signal) *Transport {
 		return nil
 	}
 
-	if role == PUBLISHER {
+	if role == Target_PUBLISHER {
 		_, err = t.pc.CreateDataChannel(API_CHANNEL, &webrtc.DataChannelInit{})
 
 		if err != nil {

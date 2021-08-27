@@ -51,7 +51,11 @@ func NewEngine() *Engine {
 
 // NewClient create a sdk client
 func (e *Engine) NewClient(addr string, cid ...string) (*Client, error) {
-	uid := cid[0]
+	var uid string
+	if len(cid) > 0 {
+		uid = cid[0]
+	}
+
 	if uid == "" {
 		uid = cuid.New()
 	}
@@ -80,8 +84,8 @@ func (e *Engine) NewClient(addr string, cid ...string) (*Client, error) {
 		}
 	}
 
-	c.pub = NewTransport(PUBLISHER, c.signal)
-	c.sub = NewTransport(SUBSCRIBER, c.signal)
+	c.pub = NewTransport(Target_PUBLISHER, c.signal)
+	c.sub = NewTransport(Target_PUBLISHER, c.signal)
 
 	e.addClient(c)
 	return c, nil

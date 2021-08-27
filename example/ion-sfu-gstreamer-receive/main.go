@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-sfu-gstreamer-receive", nil)
 )
 
 func init() {
@@ -26,28 +26,11 @@ func init() {
 
 func runClientLoop(addr, session string) {
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
-	}
-
-	config := sdk.Config{
-		Log: log.Config{
-			Level: "debug",
-		},
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
-	}
 	// new sdk engine
-	engine := sdk.NewEngine(config)
+	engine := sdk.NewEngine()
 
 	// create a new client from engine
-	c, err := sdk.NewClient(engine, addr, "")
+	c, err := engine.NewClient(addr)
 	if err != nil {
 		log.Errorf("sdk.NewClient: err=%v", err)
 		return
@@ -85,7 +68,7 @@ func runClientLoop(addr, session string) {
 	}
 
 	// client join a session
-	err = c.Join(session, nil)
+	err = c.Join(session)
 
 	// publish file to session if needed
 	if err != nil {
@@ -98,8 +81,8 @@ func runClientLoop(addr, session string) {
 func main() {
 	// parse flag
 	var session, addr string
-	flag.StringVar(&addr, "addr", "localhost:50051", "ion-cluster grpc addr")
-	flag.StringVar(&session, "session", "test room", "join session name")
+	flag.StringVar(&addr, "addr", "localhost:5551", "ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
 	go runClientLoop(addr, session)

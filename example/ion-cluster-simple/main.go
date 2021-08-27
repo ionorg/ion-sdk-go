@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lucsky/cuid"
 	ilog "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	gst "github.com/pion/ion-sdk-go/pkg/gstreamer-sink"
@@ -16,9 +15,10 @@ import (
 )
 
 var (
-	log  = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-cluster", nil)
+	log  = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-cluster-simple", nil)
 	info = map[string]interface{}{"name": "room-client"}
-	uid  = cuid.New()
+	sid  = "ion"
+	uid  = "ion-cluster-simple-" + sdk.RandomString(4)
 )
 
 func init() {
@@ -32,11 +32,69 @@ func main() {
 	// parse flag
 	var session, addr string
 	flag.StringVar(&addr, "addr", "localhost:5551", "ion-cluster grpc addr")
-	flag.StringVar(&session, "session", "test room", "join session name")
+	flag.StringVar(&session, "session", sid, "join session name")
 	flag.Parse()
 
 	connector := sdk.NewIonConnector(addr, uid, info)
 
+	// THIS IS ROOM MANAGEMENT API
+	// ==========================
+	// create room
+	// err := connector.CreateRoom(sdk.RoomInfo{Sid: session})
+	// if err != nil {
+	// 	log.Error("err=%v", err)
+	// 	return
+	// }
+
+	// // add peer to room
+	// err = connector.AddPeer(sdk.PeerInfo{Sid: session, Uid: uid})
+	// if err != nil {
+	// 	log.Error("err=%v", err)
+	// 	return
+	// }
+
+	// // get peers from room
+	// peers := connector.GetPeers(session)
+	// log.Infof(" peers=%+v", peers)
+
+	// // update peer in room
+	// err = connector.UpdatePeer(sdk.PeerInfo{Sid: session, Uid: "peer1", DisplayName: "name"})
+	// if err != nil {
+	// 	log.Error("err=%v", err)
+	// 	return
+	// }
+	// time.Sleep(3 * time.Second)
+
+	// // remove peer from room
+	// err = connector.RemovePeer(session, "peer1")
+	// if err != nil {
+	// 	log.Error("err=%v", err)
+	// 	return
+	// }
+
+	// // lock room
+	// err = connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: true})
+	// if err != nil {
+	// 	log.Error("err=%v", err)
+	// 	return
+	// }
+
+	// // unlock room
+	// err = connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: false})
+	// if err != nil {
+	// 	log.Error("err=%v", err)
+	// 	return
+	// }
+
+	// // end room
+	// err = connector.EndRoom(session, "conference end", true)
+	// if err != nil {
+	// 	log.Error("err=%v", err)
+	// 	return
+	// }
+
+	// THIS IS ROOM SINGAL API
+	// ===============================
 	connector.OnError = func(err error) {
 		log.Errorf("OnError %v", err)
 	}
@@ -96,45 +154,22 @@ func main() {
 		}
 	}
 
-	// try create room
-	err := connector.CreateRoom(sdk.RoomInfo{Sid: session})
+	// join room
+	err := connector.Join(
+		sdk.Join{
+			Sid:         sid,
+			Uid:         uid,
+			DisplayName: uid,
+			Role:        sdk.Role_Host,
+			Protocol:    sdk.Protocol_WebRTC,
+			Direction:   sdk.Peer_BILATERAL,
+		},
+	)
+
 	if err != nil {
-		log.Error("err=%v", err)
+		log.Errorf("Join error: %v", err)
 		return
 	}
-
-	// join room
-	// err = connector.Join(session)
-	// if err != nil {
-	// 	log.Error("err=%v", err)
-	// 	return
-	// }
-
-	// add peer
-	connector.AddPeer(sdk.PeerInfo{Sid: session, Uid: "peer1"})
-
-	// get peers
-	peers := connector.GetPeers(session)
-	log.Infof(" peers=%+v", peers)
-
-	// update peer
-	connector.UpdatePeer(sdk.PeerInfo{Sid: session, Uid: "peer1", DisplayName: "name"})
-
-	time.Sleep(3 * time.Second)
-	// remove peer
-	connector.RemovePeer(session, "peer1")
-
-	time.Sleep(3 * time.Second)
-	// lock room
-	connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: true})
-
-	time.Sleep(2 * time.Second)
-	// unlock room
-	connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: false})
-
-	time.Sleep(2 * time.Second)
-	// end room
-	connector.EndRoom(session, "conference end", true)
 
 	gst.StartMainLoop()
 }

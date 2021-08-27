@@ -1,5 +1,10 @@
 package engine
 
+import (
+	"math/rand"
+	"time"
+)
+
 func GetArgs(args ...string) (arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10 string) {
 	// at least one
 	if len(args) < 1 {
@@ -33,4 +38,15 @@ func GetArgs(args ...string) (arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, ar
 		}
 	}
 	return arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10
+}
+
+// RandomString generate a random string
+func RandomString(n int) string {
+	var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890")
+	rand.Seed(time.Now().UnixNano())
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
 }

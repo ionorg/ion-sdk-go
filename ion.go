@@ -8,17 +8,42 @@ import (
 	"github.com/pion/webrtc/v3"
 )
 
-type PeerState int32
-
-const (
-	PeerJOIN   PeerState = 0
-	PeerUPDATE PeerState = 1
-	PeerLEAVE  PeerState = 2
-)
-
 var (
 	ErrorReplyNil      = errors.New("reply is nil")
 	ErrorInvalidParams = errors.New("invalid params")
+)
+
+type Protocol int32
+
+const (
+	Protocol_ProtocolUnknown Protocol = 0
+	Protocol_WebRTC          Protocol = 1
+	Protocol_SIP             Protocol = 2
+	Protocol_RTMP            Protocol = 3
+	Protocol_RTSP            Protocol = 4
+)
+
+type PeerState int32
+
+const (
+	PeerState_JOIN   PeerState = 0
+	PeerState_UPDATE PeerState = 1
+	PeerState_LEAVE  PeerState = 2
+)
+
+type Peer_Direction int32
+
+const (
+	Peer_INCOMING  Peer_Direction = 0
+	Peer_OUTGOING  Peer_Direction = 1
+	Peer_BILATERAL Peer_Direction = 2
+)
+
+type Role int32
+
+const (
+	Role_Host  Role = 0
+	Role_Guest Role = 1
 )
 
 type RoomInfo struct {
@@ -28,23 +53,35 @@ type RoomInfo struct {
 	Lock     bool
 }
 
-type TrackInfo struct {
-	Id       string
-	StreamId string
-}
+// type TrackInfo struct {
+// 	Id       string
+// 	StreamId string
+// }
 
 type PeerInfo struct {
 	Sid         string
 	Uid         string
 	DisplayName string
-	// ExtraInfo   []byte
+	ExtraInfo   []byte
 	Destination string
-	Role        string
-	Protocol    string
-	// Avatar        string
-	Direction string
-	// Vendor        string
-	Tracks []TrackInfo
+	Role        Role
+	Protocol    Protocol
+	Avatar      string
+	Direction   Peer_Direction
+	Vendor      string
+}
+
+type Join struct {
+	Sid         string
+	Uid         string
+	DisplayName string
+	ExtraInfo   []byte
+	Destination string
+	Role        Role
+	Protocol    Protocol
+	Avatar      string
+	Direction   Peer_Direction
+	Vendor      string
 }
 
 type IonConnector struct {
@@ -167,9 +204,9 @@ func (i *IonConnector) SFU() *Client {
 	return i.sfu
 }
 
-func (i *IonConnector) Join(sid string) error {
-	i.sid = sid
-	return i.room.Join(i.sid, i.uid, i.pinfo)
+func (i *IonConnector) Join(j Join) error {
+	i.sid = j.Sid
+	return i.room.Join(j)
 }
 
 func (i *IonConnector) Leave(sid, uid string) error {
@@ -246,15 +283,6 @@ func (i *IonConnector) EndRoom(sid, reason string, delete bool) error {
 }
 
 // AddPeer to room, at least a sid
-// sid: session/room id
-// uid: user/peer id
-// dest: url if is rtmp/rtsp/sip..
-// name: source name if is rtmp/rtsp/sip..
-// protocol: webrtc/rtmp/rtsp/sip  default: webrtc
-// direction: push/pull/both
-// role: host/guest
-//func (i *IonConnector) AddPeer(sid, uid, dest, name, protocol, direction, role ...string) error {
-//func (i *IonConnector) AddPeer(args ...string) error {
 func (i *IonConnector) AddPeer(peer PeerInfo) error {
 	// at least sid uid
 	if peer.Sid == "" || peer.Uid == "" {
@@ -264,31 +292,6 @@ func (i *IonConnector) AddPeer(peer PeerInfo) error {
 	var protocolType room.Protocol
 	var directionType room.Peer_Direction
 	var roleType room.Role
-
-	switch peer.Protocol {
-	case "rtmp":
-		protocolType = room.Protocol_RTMP
-	case "rtsp":
-		protocolType = room.Protocol_RTSP
-	case "sip":
-		protocolType = room.Protocol_SIP
-	default:
-		protocolType = room.Protocol_WebRTC
-	}
-
-	switch peer.Direction {
-	case "push":
-		directionType = room.Peer_INCOMING
-	case "pull":
-		directionType = room.Peer_OUTGOING
-	}
-
-	switch peer.Role {
-	case "host":
-		roleType = room.Role_Host
-	case "guest":
-		roleType = room.Role_Guest
-	}
 
 	info := &room.Peer{
 		Sid:         peer.Sid,
@@ -346,45 +349,17 @@ func (i *IonConnector) RemovePeer(sid, uid string) error {
 func (i *IonConnector) UpdatePeer(peer PeerInfo) error {
 	// at least sid uid
 	if peer.Sid == "" || peer.Uid == "" {
-		return errors.New("invalid params")
+		return ErrorInvalidParams
 	}
 
-	var protocolType room.Protocol
-	var directionType room.Peer_Direction
-	var roleType room.Role
-
-	switch peer.Protocol {
-	case "rtmp":
-		protocolType = room.Protocol_RTMP
-	case "rtsp":
-		protocolType = room.Protocol_RTSP
-	case "sip":
-		protocolType = room.Protocol_SIP
-	default:
-		protocolType = room.Protocol_WebRTC
-	}
-
-	switch peer.Direction {
-	case "push":
-		directionType = room.Peer_INCOMING
-	case "pull":
-		directionType = room.Peer_OUTGOING
-	}
-
-	switch peer.Role {
-	case "host":
-		roleType = room.Role_Host
-	case "guest":
-		roleType = room.Role_Guest
-	}
 	info := &room.Peer{
 		Sid:         peer.Sid,
 		Uid:         peer.Uid,
 		Destination: peer.Destination,
 		DisplayName: peer.DisplayName,
-		Role:        roleType,
-		Protocol:    protocolType,
-		Direction:   directionType,
+		Role:        room.Role(peer.Role),
+		Protocol:    room.Protocol(peer.Protocol),
+		Direction:   room.Peer_Direction(peer.Direction),
 	}
 	log.Infof("info=%+v", info)
 	reply, err := i.room.UpdatePeer(
@@ -424,17 +399,17 @@ func (i *IonConnector) GetPeers(sid string) []PeerInfo {
 	}
 	log.Infof("peers=%+v", reply.Peers)
 	for _, p := range reply.Peers {
-		var trackInfos []TrackInfo
-		for _, t := range p.Tracks {
-			trackInfos = append(trackInfos, TrackInfo{
-				Id:       t.Id,
-				StreamId: t.StreamId,
-			})
-		}
 		infos = append(infos, PeerInfo{
-			Sid:    p.Sid,
-			Uid:    p.Uid,
-			Tracks: trackInfos,
+			Sid:         p.Sid,
+			Uid:         p.Uid,
+			DisplayName: p.DisplayName,
+			ExtraInfo:   p.ExtraInfo,
+			Destination: p.Destination,
+			Role:        Role(p.Role),
+			Protocol:    Protocol(p.Protocol),
+			Avatar:      p.Avatar,
+			Direction:   Peer_Direction(p.Direction),
+			Vendor:      p.Vendor,
 		})
 	}
 	log.Infof("infos=%+v", infos)

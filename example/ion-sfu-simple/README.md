@@ -11,10 +11,10 @@ This is a simple example to show:
 
 ```
 # save all tracks to disk
-go run main.go -addr "localhost:50051" -session "test session"
+go run main.go -addr "localhost:5551" -session "ion"
 
 # add -file to also play a file into the room (while saving tracks)
-go run main.go -addr "localhost:50051" -session "test session" -file playback.webm
+go run main.go -addr "localhost:5551" -session "ion" -file playback.webm
 
 ```
 
@@ -22,7 +22,7 @@ go run main.go -addr "localhost:50051" -session "test session" -file playback.we
 
 ```
 go build main.go
-./main -addr "localhost:50051" -session "test session"
+./main -addr "localhost:5551" -session "ion"
 ```
 
 

@@ -52,8 +52,7 @@ func NewRoomClient(addr string) *RoomClient {
 	c.roomServiceClient = room.NewRoomServiceClient(conn)
 	c.roomSignalClient = room.NewRoomSignalClient(conn)
 	c.roomSignalStream, err = c.roomSignalClient.Signal(c.ctx)
-	// c.roomSignalClient, err = c.client.Signal(c.ctx)
-	// c.roomSignalClient, err = c.client.Signal(c.ctx)
+
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return nil
@@ -67,9 +66,19 @@ func (c *RoomClient) CreateRoom(ctx context.Context, req *room.CreateRoomRequest
 	return c.roomServiceClient.CreateRoom(c.ctx, req)
 }
 
+// UpdateRoom lock/unlock a room, avoid someone join
+func (c *RoomClient) UpdateRoom(ctx context.Context, req *room.UpdateRoomRequest) (*room.UpdateRoomReply, error) {
+	return c.roomServiceClient.UpdateRoom(c.ctx, req)
+}
+
 // EndRoom delete a room
 func (c *RoomClient) EndRoom(ctx context.Context, req *room.EndRoomRequest) (*room.EndRoomReply, error) {
 	return c.roomServiceClient.EndRoom(c.ctx, req)
+}
+
+// GetRooms get all rooms
+func (c *RoomClient) GetRooms(ctx context.Context, req *room.GetRoomsRequest) (*room.GetRoomsReply, error) {
+	return c.roomServiceClient.GetRooms(c.ctx, req)
 }
 
 // AddPeer add a Peer
@@ -87,16 +96,6 @@ func (c *RoomClient) GetPeers(ctx context.Context, req *room.GetPeersRequest) (*
 	return c.roomServiceClient.GetPeers(c.ctx, req)
 }
 
-// LockRoom lock/unlock a room, avoid someone join
-func (c *RoomClient) UpdateRoom(ctx context.Context, req *room.UpdateRoomRequest) (*room.UpdateRoomReply, error) {
-	return c.roomServiceClient.UpdateRoom(c.ctx, req)
-}
-
-// SetImportance ..
-func (c *RoomClient) SetImportance(ctx context.Context, req *room.SetImportanceRequest) (*room.SetImportanceReply, error) {
-	return c.roomServiceClient.SetImportance(c.ctx, req)
-}
-
 // EditPeerInfo ..
 func (c *RoomClient) UpdatePeer(ctx context.Context, req *room.UpdatePeerRequest) (*room.UpdatePeerReply, error) {
 	return c.roomServiceClient.UpdatePeer(c.ctx, req)
@@ -108,31 +107,39 @@ func (c *RoomClient) Close() {
 	log.Infof("Close ok")
 }
 
-func (c *RoomClient) Join(sid string, uid string, info map[string]interface{}) error {
-	log.Infof("sid=%v uid=%v, info=%v", sid, uid, info)
-	buf, err := json.Marshal(info)
-	if err != nil {
-		log.Errorf("Marshal info [%v] err=%v", info, err)
-		c.OnError(err)
-		return err
+func (c *RoomClient) Join(j Join) error {
+	log.Infof("join=%+v", j)
+
+	if j.Sid == "" {
+		log.Errorf("invalid sid [%v]", j.Sid)
+		c.OnError(ErrorInvalidParams)
+		return ErrorInvalidParams
 	}
-	err = c.roomSignalStream.Send(
+	if j.Uid == "" {
+		j.Uid = RandomString(6)
+	}
+	err := c.roomSignalStream.Send(
 		&room.Request{
 			Payload: &room.Request_Join{
 				Join: &room.JoinRequest{
-					Sid:         sid,
-					Uid:         uid,
-					DisplayName: "ion-sdk-go",
-					Role:        room.Role_Host,
-					Password:    "",
-					ExtraInfo:   buf,
+					Peer: &room.Peer{
+						Sid:         j.Sid,
+						Uid:         j.Uid,
+						DisplayName: j.DisplayName,
+						ExtraInfo:   j.ExtraInfo,
+						Destination: j.Destination,
+						Role:        room.Role(j.Role),
+						Protocol:    room.Protocol(j.Protocol),
+						Avatar:      j.Avatar,
+						Direction:   room.Peer_Direction(j.Direction),
+						Vendor:      j.Vendor,
+					},
 				},
 			},
 		},
 	)
-
 	if err != nil {
-		log.Errorf("[%v] err=%v", sid, err)
+		log.Errorf("[%v] err=%v", j.Sid, err)
 		c.OnError(err)
 		return err
 	}
@@ -264,38 +271,24 @@ func (c *RoomClient) roomSignalReadLoop() error {
 			}
 		case *room.Reply_Peer:
 			event := payload.Peer
-			var trackInfos []TrackInfo
-			if event.State == room.PeerState_JOIN ||
-				event.State == room.PeerState_LEAVE {
-				for _, track := range event.Peer.Tracks {
-					trackInfos = append(
-						trackInfos,
-						TrackInfo{
-							Id:       track.Id,
-							StreamId: track.StreamId,
-						},
-					)
-				}
-				if err != nil {
-					log.Errorf("Unmarshal peer.info: err %v", err)
-					c.OnError(err)
-					return err
-				}
-			}
 
 			if c.OnPeerEvent != nil {
 				c.OnPeerEvent(
 					PeerState(event.State),
 					PeerInfo{
-						Sid:    event.Peer.Sid,
-						Uid:    event.Peer.Uid,
-						Tracks: trackInfos,
+						Sid:         event.Peer.Sid,
+						Uid:         event.Peer.Uid,
+						DisplayName: event.Peer.DisplayName,
+						ExtraInfo:   event.Peer.ExtraInfo,
+						Destination: event.Peer.Destination,
+						Role:        Role(event.Peer.Role),
+						Protocol:    Protocol(event.Peer.Protocol),
+						Avatar:      event.Peer.Avatar,
+						Direction:   Peer_Direction(event.Peer.Direction),
+						Vendor:      event.Peer.Vendor,
 					},
 				)
 			}
-		case *room.Reply_MediaPresentation:
-			event := payload.MediaPresentation
-			log.Info("room.MediaPresentation: %+v", event)
 		case *room.Reply_Disconnect:
 			event := payload.Disconnect
 			log.Info("room.Disconnect: %+v", event)

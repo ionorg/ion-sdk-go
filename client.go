@@ -12,8 +12,6 @@ import (
 
 const (
 	API_CHANNEL = "ion-sfu"
-	PUBLISHER   = 0
-	SUBSCRIBER  = 1
 )
 
 //Call dc api
@@ -23,36 +21,58 @@ type Call struct {
 	Audio    bool   `json:"audio"`
 }
 
-type TrackState int32
-
-// track state
-const (
-	TrackNone   TrackState = 0
-	TrackAdd    TrackState = 1
-	TrackRemove TrackState = 2
-)
-
-// Simulcast info
-type Simulcast struct {
-	Rid        string
-	Direction  string
-	Parameters string
+type VideoInfo struct {
+	Width     uint32
+	Height    uint32
+	Framerate uint32
+	// Simulcast
+	// {'f': 'send', 'h': 'send', 'q': 'send'}
+	// {'f': 'recv', 'h': 'recv', 'q': 'recv'}
+	Simulcast map[string]string
 }
 
-// Track info
-type Track struct {
-	ID        string
-	StreamID  string
+type TrackInfo struct {
+	Id        string
 	Kind      string
 	Muted     bool
-	Simulcast []Simulcast
+	Type      MediaType
+	StreamId  string
+	Label     string
+	VideoInfo *VideoInfo
 }
+
+type Target int32
+
+const (
+	Target_PUBLISHER  Target = 0
+	Target_SUBSCRIBER Target = 1
+)
+
+type MediaType int32
+
+const (
+	MediaType_MediaUnknown  MediaType = 0
+	MediaType_UserMedia     MediaType = 1
+	MediaType_ScreenCapture MediaType = 2
+	MediaType_Cavans        MediaType = 3
+	MediaType_Streaming     MediaType = 4
+	MediaType_VoIP          MediaType = 5
+)
+
+type TrackEvent_State int32
+
+const (
+	TrackEvent_ADD    TrackEvent_State = 0
+	TrackEvent_UPDATE TrackEvent_State = 1
+	TrackEvent_REMOVE TrackEvent_State = 2
+)
 
 // TrackEvent info
 type TrackEvent struct {
-	State  TrackState
+	State TrackEvent_State
+	// user id
 	Uid    string
-	Tracks []Track
+	Tracks []*TrackInfo
 }
 
 // Client a sdk client
@@ -61,7 +81,6 @@ type Client struct {
 	sid    string
 	pub    *Transport
 	sub    *Transport
-	cfg    WebRTCTransportConfig
 	signal *Signal
 
 	//export to user
@@ -240,7 +259,7 @@ func (c *Client) CreateDataChannel(label string) (*webrtc.DataChannel, error) {
 func (c *Client) trickle(candidate webrtc.ICECandidateInit, target int) {
 	log.Debugf("id=%v candidate=%v target=%v", c.uid, candidate, target)
 	var t *Transport
-	if target == SUBSCRIBER {
+	if target == int(Target_SUBSCRIBER) {
 		t = c.sub
 	} else {
 		t = c.pub
@@ -271,7 +290,7 @@ func (c *Client) negotiate(sdp webrtc.SessionDescription) error {
 	if len(c.sub.SendCandidates) > 0 {
 		for _, cand := range c.sub.SendCandidates {
 			log.Debugf("id=%v send sub.SendCandidates c.uid, c.signal.trickle cand=%v", c.uid, cand)
-			c.signal.trickle(cand, SUBSCRIBER)
+			c.signal.trickle(cand, Target_SUBSCRIBER)
 		}
 		c.sub.SendCandidates = []*webrtc.ICECandidate{}
 	}
@@ -300,8 +319,11 @@ func (c *Client) negotiate(sdp webrtc.SessionDescription) error {
 	}
 
 	// 6. send answer to sfu
-	c.signal.answer(answer)
-
+	err = c.signal.answer(answer)
+	if err != nil {
+		log.Errorf("id=%v err=%v", c.uid, err)
+		return err
+	}
 	return err
 }
 
@@ -320,7 +342,10 @@ func (c *Client) onNegotiationNeeded() {
 	}
 
 	//3. send offer to sfu
-	c.signal.offer(offer)
+	err = c.signal.offer(offer)
+	if err != nil {
+		log.Errorf("id=%v err=%v", c.uid, err)
+	}
 }
 
 // selectRemote select remote video/audio
@@ -368,28 +393,6 @@ func (c *Client) selectRemote(streamId, video string, audio bool) error {
 	}
 	return err
 }
-
-// UnSubscribeAll unsubscribe all stream
-// func (c *Client) UnSubscribeAll() {
-// c.streamLock.RLock()
-// m := c.remoteStreamId
-// c.streamLock.RUnlock()
-// for streamId := range m {
-// log.Debugf("id=%v UnSubscribe remote streamid=%v", c.uid, streamId)
-// c.selectRemote(streamId, "none", false)
-// }
-// }
-
-// SubscribeAll subscribe all stream with the same video/audio param
-// func (c *Client) SubscribeAll(video string, audio bool) {
-// c.streamLock.RLock()
-// m := c.remoteStreamId
-// c.streamLock.RUnlock()
-// for streamId := range m {
-// log.Debugf("id=%v Subscribe remote streamid=%v", c.uid, streamId)
-// c.selectRemote(streamId, video, audio)
-// }
-// }
 
 // PublishWebm publish a webm producer
 func (c *Client) PublishFile(file string, video, audio bool) error {
@@ -443,18 +446,16 @@ func (c *Client) Subscribe(trackIds []string, enabled bool) error {
 
 func (c *Client) trackEvent(event TrackEvent) {
 	if c.OnTrackEvent == nil {
-		log.Errorf("c.OnTrackEvent == nil use default one")
+		log.Warn("c.OnTrackEvent == nil use default one")
 		c.OnTrackEvent = func(event TrackEvent) {
 			log.Infof("OnTrackEvent: %+v", event)
-			if event.State == TrackAdd {
-				var trackIds []string
-				for _, track := range event.Tracks {
-					trackIds = append(trackIds, track.ID)
-				}
-				err := c.Subscribe(trackIds, true)
-				if err != nil {
-					log.Errorf("Subscribe trackIds=%v error: %v", trackIds, err)
-				}
+			var trackIds []string
+			for _, track := range event.Tracks {
+				trackIds = append(trackIds, track.Id)
+			}
+			err := c.Subscribe(trackIds, true)
+			if err != nil {
+				log.Errorf("Subscribe trackIds=%v error: %v", trackIds, err)
 			}
 		}
 	}
@@ -493,7 +494,7 @@ func (c *Client) setRemoteSDP(sdp webrtc.SessionDescription) error {
 	if len(c.pub.SendCandidates) > 0 {
 		for _, cand := range c.pub.SendCandidates {
 			log.Debugf("id=%v c.signal.trickle cand=%v", c.uid, cand)
-			c.signal.trickle(cand, PUBLISHER)
+			c.signal.trickle(cand, Target_PUBLISHER)
 		}
 		c.pub.SendCandidates = []*webrtc.ICECandidate{}
 	}
