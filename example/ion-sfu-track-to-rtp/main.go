@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "main", nil)
 )
 
 type udpConn struct {
@@ -125,29 +125,15 @@ func main() {
 	// parse flag
 	var session, addr, file string
 	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
-	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test session", "join session name")
+	flag.StringVar(&addr, "addr", "localhost:5551", "ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
-	}
-
-	config := sdk.Config{
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
-	}
 	// new sdk engine
-	e := sdk.NewEngine(config)
+	e := sdk.NewEngine()
 
 	// create a new client from engine
-	c, err := sdk.NewClient(e, addr, "client id")
+	c, err := e.NewClient(addr)
 	if err != nil {
 		log.Errorf("err=%v", err)
 		return
@@ -158,7 +144,7 @@ func main() {
 	c.OnTrack = trackToRTP
 
 	// client join a session
-	err = c.Join(session, nil)
+	err = c.Join(session)
 
 	// publish file to session if needed
 	if err != nil {
