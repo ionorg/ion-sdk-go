@@ -30,24 +30,14 @@ func main() {
 	e := sdk.NewEngine()
 
 	// get a client from engine
-	c, err := e.NewClient(addr)
+	c, err := e.NewClient(sdk.ClientConfig{
+		Addr: addr,
+		Sid:  session,
+	})
+
 	if err != nil {
 		log.Errorf("sdk.NewClient error : %v", err)
 		return
-	}
-
-	c.OnTrackEvent = func(event sdk.TrackEvent) {
-		log.Infof("OnTrackEvent: %+v", event)
-		if event.State == sdk.TrackEvent_ADD {
-			var trackIds []string
-			for _, track := range event.Tracks {
-				trackIds = append(trackIds, track.Id)
-			}
-			err := c.Subscribe(trackIds, true)
-			if err != nil {
-				log.Errorf("Subscribe trackIds=%v error: %v", trackIds, err)
-			}
-		}
 	}
 
 	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: "video/vp8"}, "video", "pion2")

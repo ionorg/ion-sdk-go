@@ -54,7 +54,7 @@ func NewSignal(addr string, id string) (*Signal, error) {
 	s.client = pb.NewRTCClient(conn)
 	s.stream, err = s.client.Signal(s.ctx)
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return nil, err
 	}
 	return s, nil
@@ -132,7 +132,7 @@ func (s *Signal) onSignalHandle() error {
 				log.Infof("[%v] [description] got offer call s.OnNegotiate sdp=%+v", s.id, sdp)
 				err := s.OnNegotiate(sdp)
 				if err != nil {
-					log.Errorf("err=%v", err)
+					log.Errorf("error: %v", err)
 				}
 			} else if sdp.Type == webrtc.SDPTypeAnswer {
 				log.Infof("[%v] [description] got answer call s.OnSetRemoteSDP sdp=%+v", s.id, sdp)
@@ -153,15 +153,6 @@ func (s *Signal) onSignalHandle() error {
 			}
 			var TrackInfos []*TrackInfo
 			for _, v := range payload.TrackEvent.Tracks {
-				var videoInfo *VideoInfo
-				if v.VideoInfo != nil {
-					videoInfo = &VideoInfo{
-						Width:     v.VideoInfo.Width,
-						Height:    v.VideoInfo.Height,
-						Framerate: v.VideoInfo.FrameRate,
-						Simulcast: v.VideoInfo.Simulcast,
-					}
-				}
 				TrackInfos = append(TrackInfos, &TrackInfo{
 					Id:        v.Id,
 					Kind:      v.Kind,
@@ -169,7 +160,10 @@ func (s *Signal) onSignalHandle() error {
 					Type:      MediaType(v.Type),
 					StreamId:  v.StreamId,
 					Label:     v.Label,
-					VideoInfo: videoInfo,
+					Width:     v.Width,
+					Height:    v.Height,
+					FrameRate: v.FrameRate,
+					Layer:     v.Layer,
 				})
 			}
 			trackEvent := TrackEvent{
@@ -190,7 +184,7 @@ func (s *Signal) onSignalHandle() error {
 	}
 }
 
-func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription) error {
+func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription, config map[string]string) error {
 	log.Infof("[%v] [Signal.Join] sid=%v", s.id, sid)
 	go s.onSignalHandleOnce()
 	s.Lock()
@@ -198,8 +192,9 @@ func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription) e
 		&pb.Request{
 			Payload: &pb.Request_Join{
 				Join: &pb.JoinRequest{
-					Sid: sid,
-					Uid: uid,
+					Sid:    sid,
+					Uid:    uid,
+					Config: config,
 					Description: &pb.SessionDescription{
 						Target: pb.Target_PUBLISHER,
 						Type:   "offer",
@@ -217,10 +212,10 @@ func (s *Signal) Join(sid string, uid string, offer webrtc.SessionDescription) e
 }
 
 func (s *Signal) trickle(candidate *webrtc.ICECandidate, target Target) {
-	log.Infof("[%v] [Signal.trickle] candidate=%v target=%v", s.id, candidate, target)
+	log.Debugf("[%v] candidate=%v target=%v", s.id, candidate, target)
 	bytes, err := json.Marshal(candidate.ToJSON())
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return
 	}
 	go s.onSignalHandleOnce()
@@ -287,16 +282,26 @@ func (s *Signal) answer(sdp webrtc.SessionDescription) error {
 }
 
 // Subscribe to tracks
-func (s *Signal) Subscribe(trackIds []string, enable bool) error {
-	if len(trackIds) == 0 {
+func (s *Signal) Subscribe(trackInfos []*Subscription) error {
+	if len(trackInfos) == 0 {
 		return errors.New("track id is empty")
 	}
+	var infos []*pb.Subscription
+	for _, t := range trackInfos {
+		infos = append(infos, &pb.Subscription{
+			TrackId:   t.TrackId,
+			Mute:      t.Mute,
+			Subscribe: t.Subscribe,
+			Layer:     t.Layer,
+		})
+	}
+
+	log.Infof("[Subscribe]: %v", infos)
 	err := s.stream.Send(
 		&pb.Request{
 			Payload: &pb.Request_Subscription{
 				Subscription: &pb.SubscriptionRequest{
-					TrackIds:  trackIds,
-					Subscribe: enable,
+					Subscriptions: infos,
 				},
 			},
 		},

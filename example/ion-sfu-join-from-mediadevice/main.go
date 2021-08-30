@@ -36,7 +36,10 @@ func main() {
 	e := sdk.NewEngine()
 
 	// get a client from engine
-	c, err := e.NewClient(addr)
+	c, err := e.NewClient(sdk.ClientConfig{
+		Addr: addr,
+		Sid:  session,
+	})
 
 	c.GetPubTransport().GetPeerConnection().OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Infof("Connection state changed: %s", state)

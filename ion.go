@@ -71,7 +71,7 @@ type PeerInfo struct {
 	Vendor      string
 }
 
-type Join struct {
+type JoinInfo struct {
 	Sid         string
 	Uid         string
 	DisplayName string
@@ -84,14 +84,17 @@ type Join struct {
 	Vendor      string
 }
 
+type IonConnectorConfig struct {
+	Token string
+}
+
 type IonConnector struct {
-	ctx      context.Context
-	url      string
-	engine   *Engine
-	room     *RoomClient
-	sfu      *Client
-	uid, sid string
-	pinfo    map[string]interface{}
+	ctx             context.Context
+	url             string
+	engine          *Engine
+	room            *RoomClient
+	sfu             *Client
+	uid, sid, token string
 
 	OnTrack       func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver)
 	OnDataChannel func(dc *webrtc.DataChannel)
@@ -105,26 +108,35 @@ type IonConnector struct {
 	OnError      func(error)
 }
 
-func NewIonConnector(addr string, uid string, pinfo map[string]interface{}) *IonConnector {
-	// init engine
+// NewIonConnector create a ion connector
+func NewIonConnector(addr, uid string, config ...IonConnectorConfig) *IonConnector {
+	var token string
+	if len(config) > 0 {
+		token = config[0].Token
+	}
+
 	i := &IonConnector{
 		uid:   uid,
+		token: token,
 		url:   addr,
-		pinfo: pinfo,
-		room:  NewRoomClient(addr),
-		ctx:   context.Background(),
+
+		ctx: context.Background(),
 	}
 
 	// new sdk engine
 	i.engine = NewEngine()
-
+	i.room = NewRoomClient(addr)
 	i.room.OnJoin = func(success bool, info RoomInfo, err error) {
 		log.Infof("OnJoin success=%v info=%v err=%v", success, info, err)
 		if success {
 			// create a new client from engine
-			c, err := i.engine.NewClient(i.url, i.uid)
+			c, err := i.engine.NewClient(ClientConfig{
+				Addr: i.url,
+				Sid:  info.Sid,
+				Uid:  i.uid,
+			})
 			if err != nil {
-				log.Errorf("err=%v", err)
+				log.Errorf("error: %v", err)
 				return
 			}
 
@@ -146,7 +158,11 @@ func NewIonConnector(addr string, uid string, pinfo map[string]interface{}) *Ion
 				}
 			}
 
-			c.Join(i.sid)
+			err = c.Join(info.Sid)
+			if err != nil {
+				log.Errorf("error: %v", err)
+				return
+			}
 
 			i.sfu = c
 		}
@@ -204,7 +220,7 @@ func (i *IonConnector) SFU() *Client {
 	return i.sfu
 }
 
-func (i *IonConnector) Join(j Join) error {
+func (i *IonConnector) Join(j JoinInfo) error {
 	i.sid = j.Sid
 	return i.room.Join(j)
 }
@@ -213,8 +229,8 @@ func (i *IonConnector) Leave(sid, uid string) error {
 	return i.room.Leave(sid, uid)
 }
 
-func (i *IonConnector) Message(sid, from, to string, data map[string]interface{}) {
-	i.room.SendMessage(sid, from, to, data)
+func (i *IonConnector) Message(sid, from, to string, data map[string]interface{}) error {
+	return i.room.SendMessage(sid, from, to, data)
 }
 
 func (i *IonConnector) Close() {
@@ -394,7 +410,7 @@ func (i *IonConnector) GetPeers(sid string) []PeerInfo {
 	)
 
 	if err != nil || reply == nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return infos
 	}
 	log.Infof("peers=%+v", reply.Peers)

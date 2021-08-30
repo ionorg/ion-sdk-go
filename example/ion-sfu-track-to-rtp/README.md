@@ -10,7 +10,7 @@ This example will take an audio and video track (ONLY TESTED WITH ONE) and repla
 ### 2 run the RTP forwarder
 
 ```
-go run main.go -addr "localhost:50051" -session "test session"
+go run main.go -addr "localhost:5551" -session "ion"
 ```
 
 ### 3 consume the RTP feed

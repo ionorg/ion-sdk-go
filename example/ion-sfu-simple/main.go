@@ -26,7 +26,7 @@ func saveToDisk(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	}
 
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		fileWriter.Close()
 		return
 	}
@@ -61,9 +61,13 @@ func main() {
 	e := sdk.NewEngine()
 
 	// create a new client from engine
-	c, err := e.NewClient(addr, "ion-sdk-go")
+	c, err := e.NewClient(sdk.ClientConfig{
+		Addr: addr,
+		Sid:  session,
+	})
+
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return
 	}
 	// user define receiving rtp
@@ -76,14 +80,14 @@ func main() {
 	// client join a session
 	err = c.Join(session)
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return
 	}
 
 	// publish file to session if needed
 	err = c.PublishFile(file, true, true)
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return
 	}
 

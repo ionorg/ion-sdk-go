@@ -11,7 +11,6 @@ type Transport struct {
 	signal         *Signal
 	pc             *webrtc.PeerConnection
 	role           Target
-	config         WebRTCTransportConfig
 	SendCandidates []*webrtc.ICECandidate
 	RecvCandidates []webrtc.ICECandidateInit
 }
@@ -32,6 +31,12 @@ func NewTransport(role Target, signal *Signal) *Transport {
 	} else {
 		me, err = getSubscriberMediaEngine()
 	}
+
+	if err != nil {
+		log.Errorf("getPublisherMediaEngine error: %v", err)
+		return nil
+	}
+
 	api = webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(DefaultConfig.WebRTC.Setting))
 	t.pc, err = api.NewPeerConnection(DefaultConfig.WebRTC.Configuration)
 

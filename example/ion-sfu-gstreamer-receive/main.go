@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-sfu-gstreamer-receive", nil)
+	log = ilog.NewLogger(ilog.DebugLevel, "")
 )
 
 func init() {
@@ -30,7 +30,11 @@ func runClientLoop(addr, session string) {
 	engine := sdk.NewEngine()
 
 	// create a new client from engine
-	c, err := engine.NewClient(addr)
+	c, err := engine.NewClient(sdk.ClientConfig{
+		Addr: addr,
+		Sid:  session,
+	})
+
 	if err != nil {
 		log.Errorf("sdk.NewClient: err=%v", err)
 		return
@@ -72,7 +76,7 @@ func runClientLoop(addr, session string) {
 
 	// publish file to session if needed
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 	}
 
 	select {}

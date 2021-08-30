@@ -8,7 +8,6 @@ import (
 
 	_ "net/http/pprof"
 
-	"github.com/lucsky/cuid"
 	ilog "github.com/pion/ion-log"
 	"github.com/pion/webrtc/v3"
 	"github.com/sirupsen/logrus"
@@ -21,7 +20,7 @@ var (
 		WebRTC: WebRTCTransportConfig{
 			Configuration: webrtc.Configuration{
 				ICEServers: []webrtc.ICEServer{
-					webrtc.ICEServer{
+					{
 						URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
 					},
 				},
@@ -29,11 +28,6 @@ var (
 		},
 	}
 )
-
-func init() {
-	ilog.Init(DefaultConfig.LogLevel)
-	log = ilog.NewLoggerWithFields(ilog.StringToLevel(DefaultConfig.LogLevel), "engine", nil)
-}
 
 // Engine a sdk engine
 type Engine struct {
@@ -46,27 +40,34 @@ func NewEngine() *Engine {
 	e := &Engine{
 		clients: make(map[string]map[string]*Client),
 	}
+	ilog.Init(DefaultConfig.LogLevel)
+	log = ilog.NewLoggerWithFields(ilog.StringToLevel(DefaultConfig.LogLevel), "engine", nil)
 	return e
 }
 
 // NewClient create a sdk client
-func (e *Engine) NewClient(addr string, cid ...string) (*Client, error) {
-	var uid string
-	if len(cid) > 0 {
-		uid = cid[0]
+func (e *Engine) NewClient(config ClientConfig) (*Client, error) {
+	sid, uid, addr := config.Sid, config.Uid, config.Addr
+	if addr == "" {
+		return nil, errInvalidAddr
+	}
+
+	if sid == "" {
+		return nil, errInvalidSessID
 	}
 
 	if uid == "" {
-		uid = cuid.New()
+		uid = RandomKey(6)
 	}
 
-	s, err := NewSignal(addr, uid)
+	s, err := NewSignal(config.Addr, uid)
 	if err != nil {
 		return nil, err
 	}
 
 	c := &Client{
 		engine:         e,
+		sid:            config.Sid,
 		uid:            uid,
 		signal:         s,
 		notify:         make(chan struct{}),
@@ -108,15 +109,21 @@ func (e *Engine) addClient(c *Client) {
 // delClient delete a client
 func (e *Engine) delClient(c *Client) {
 	e.Lock()
+	defer e.Unlock()
 	if e.clients[c.sid] == nil {
 		e.Unlock()
 		log.Errorf("error: %v", errInvalidSessID)
+		return
 	}
+
 	if c, ok := e.clients[c.sid][c.uid]; ok && (c != nil) {
 		c.Close()
 	}
+
 	delete(e.clients[c.sid], c.uid)
-	e.Unlock()
+	if len(e.clients[c.sid]) == 0 {
+		delete(e.clients, c.sid)
+	}
 }
 
 // Stats show a total stats to console: clients and bandwidth
@@ -127,6 +134,7 @@ func (e *Engine) Stats(cycle int) string {
 		e.RLock()
 		if len(e.clients) == 0 {
 			e.RUnlock()
+			time.Sleep(time.Second)
 			continue
 		}
 		n := 0

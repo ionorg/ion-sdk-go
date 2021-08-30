@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -24,11 +25,13 @@ type Call struct {
 type VideoInfo struct {
 	Width     uint32
 	Height    uint32
-	Framerate uint32
+	FrameRate uint32
 	// Simulcast
 	// {'f': 'send', 'h': 'send', 'q': 'send'}
 	// {'f': 'recv', 'h': 'recv', 'q': 'recv'}
-	Simulcast map[string]string
+	// Simulcast map[string]string
+	Layer     string
+	Direction string
 }
 
 type TrackInfo struct {
@@ -38,7 +41,19 @@ type TrackInfo struct {
 	Type      MediaType
 	StreamId  string
 	Label     string
-	VideoInfo *VideoInfo
+	Subscribe bool
+	Layer     string
+	Direction string
+	Width     uint32
+	Height    uint32
+	FrameRate uint32
+}
+
+type Subscription struct {
+	TrackId   string
+	Mute      bool
+	Subscribe bool
+	Layer     string
 }
 
 type Target int32
@@ -75,6 +90,13 @@ type TrackEvent struct {
 	Tracks []*TrackInfo
 }
 
+type ClientConfig struct {
+	Addr  string
+	Sid   string
+	Uid   string
+	Token string
+}
+
 // Client a sdk client
 type Client struct {
 	uid    string
@@ -105,7 +127,7 @@ type Client struct {
 }
 
 // Join client join a session
-func (c *Client) Join(sid string) error {
+func (c *Client) Join(sid string, config ...JoinConfig) error {
 	log.Debugf("[Client.Join] sid=%v uid=%v", sid, c.uid)
 	c.sub.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		log.Debugf("[c.sub.pc.OnTrack] got track streamId=%v kind=%v ssrc=%v ", track.StreamID(), track.Kind(), track.SSRC())
@@ -187,7 +209,12 @@ func (c *Client) Join(sid string) error {
 		return err
 	}
 
-	err = c.signal.Join(sid, c.uid, offer)
+	if len(config) > 0 {
+		err = c.signal.Join(sid, c.uid, offer, config[0])
+	} else {
+		err = c.signal.Join(sid, c.uid, offer, nil)
+	}
+
 	if err != nil {
 		return err
 	}
@@ -374,7 +401,7 @@ func (c *Client) selectRemote(streamId, video string, audio bool) error {
 			}
 			err = c.sub.api.Send(marshalled)
 			if err != nil {
-				log.Errorf("err=%v", err)
+				log.Errorf("error: %v", err)
 			}
 			time.Sleep(time.Millisecond * 10)
 		}
@@ -396,6 +423,9 @@ func (c *Client) selectRemote(streamId, video string, audio bool) error {
 
 // PublishWebm publish a webm producer
 func (c *Client) PublishFile(file string, video, audio bool) error {
+	if !FileExist(file) {
+		return os.ErrNotExist
+	}
 	ext := filepath.Ext(file)
 	switch ext {
 	case ".webm":
@@ -405,17 +435,25 @@ func (c *Client) PublishFile(file string, video, audio bool) error {
 	}
 	if video {
 		videoTrack, err := c.producer.GetVideoTrack()
+		if err != nil {
+			log.Debugf("error: %v", err)
+			return err
+		}
 		_, err = c.pub.pc.AddTrack(videoTrack)
 		if err != nil {
-			log.Debugf("err=%v", err)
+			log.Debugf("error: %v", err)
 			return err
 		}
 	}
 	if audio {
 		audioTrack, err := c.producer.GetAudioTrack()
+		if err != nil {
+			log.Debugf("error: %v", err)
+			return err
+		}
 		_, err = c.pub.pc.AddTrack(audioTrack)
 		if err != nil {
-			log.Debugf("err=%v", err)
+			log.Debugf("error: %v", err)
 			return err
 		}
 	}
@@ -425,39 +463,15 @@ func (c *Client) PublishFile(file string, video, audio bool) error {
 	return nil
 }
 
-func (c *Client) Simulcast(layer string) {
-	if layer == "" {
-		return
-	}
-	c.streamLock.RLock()
-	m := c.remoteStreamId
-	log.Infof("Simulcast: streams=%v", m)
-	c.streamLock.RUnlock()
-	for streamId := range m {
-		log.Debugf("id=%v simulcast remote streamid=%v", c.uid, streamId)
-		c.selectRemote(streamId, layer, true)
-	}
-}
-
-// Subscribe to tracks by id
-func (c *Client) Subscribe(trackIds []string, enabled bool) error {
-	return c.signal.Subscribe(trackIds, enabled)
+// Subscribe to tracks
+func (c *Client) Subscribe(infos []*Subscription) error {
+	return c.signal.Subscribe(infos)
 }
 
 func (c *Client) trackEvent(event TrackEvent) {
 	if c.OnTrackEvent == nil {
-		log.Warn("c.OnTrackEvent == nil use default one")
-		c.OnTrackEvent = func(event TrackEvent) {
-			log.Infof("OnTrackEvent: %+v", event)
-			var trackIds []string
-			for _, track := range event.Tracks {
-				trackIds = append(trackIds, track.Id)
-			}
-			err := c.Subscribe(trackIds, true)
-			if err != nil {
-				log.Errorf("Subscribe trackIds=%v error: %v", trackIds, err)
-			}
-		}
+		log.Errorf("c.OnTrackEvent == nil")
+		return
 	}
 	c.OnTrackEvent(event)
 }

@@ -15,10 +15,9 @@ import (
 )
 
 var (
-	log  = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-cluster-simple", nil)
-	info = map[string]interface{}{"name": "room-client"}
-	sid  = "ion"
-	uid  = "ion-cluster-simple-" + sdk.RandomString(4)
+	log = ilog.NewLogger(ilog.InfoLevel, "")
+	sid = "ion"
+	uid = sdk.RandomKey(6)
 )
 
 func init() {
@@ -28,28 +27,28 @@ func init() {
 }
 
 func main() {
-
 	// parse flag
 	var session, addr string
 	flag.StringVar(&addr, "addr", "localhost:5551", "ion-cluster grpc addr")
 	flag.StringVar(&session, "session", sid, "join session name")
 	flag.Parse()
 
-	connector := sdk.NewIonConnector(addr, uid, info)
+	config := sdk.IonConnectorConfig{}
+	connector := sdk.NewIonConnector(addr, uid, config)
 
-	// THIS IS ROOM MANAGEMENT API
-	// ==========================
-	// create room
+	// // THIS IS ROOM MANAGEMENT API
+	// // ==========================
+	// // create room
 	// err := connector.CreateRoom(sdk.RoomInfo{Sid: session})
 	// if err != nil {
-	// 	log.Error("err=%v", err)
+	// 	log.Errorf("error:%v", err)
 	// 	return
 	// }
 
 	// // add peer to room
 	// err = connector.AddPeer(sdk.PeerInfo{Sid: session, Uid: uid})
 	// if err != nil {
-	// 	log.Error("err=%v", err)
+	// 	log.Errorf("error: %v", err)
 	// 	return
 	// }
 
@@ -58,38 +57,39 @@ func main() {
 	// log.Infof(" peers=%+v", peers)
 
 	// // update peer in room
-	// err = connector.UpdatePeer(sdk.PeerInfo{Sid: session, Uid: "peer1", DisplayName: "name"})
+	// err = connector.UpdatePeer(sdk.PeerInfo{Sid: session, Uid: uid, DisplayName: "name"})
 	// if err != nil {
-	// 	log.Error("err=%v", err)
+	// 	log.Errorf("error: %v", err)
 	// 	return
 	// }
+
 	// time.Sleep(3 * time.Second)
 
 	// // remove peer from room
-	// err = connector.RemovePeer(session, "peer1")
+	// err = connector.RemovePeer(session, uid)
 	// if err != nil {
-	// 	log.Error("err=%v", err)
+	// 	log.Errorf("error: %v", err)
 	// 	return
 	// }
 
 	// // lock room
 	// err = connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: true})
 	// if err != nil {
-	// 	log.Error("err=%v", err)
+	// 	log.Errorf("error: %v", err)
 	// 	return
 	// }
 
 	// // unlock room
 	// err = connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: false})
 	// if err != nil {
-	// 	log.Error("err=%v", err)
+	// 	log.Errorf("error: %v", err)
 	// 	return
 	// }
 
 	// // end room
 	// err = connector.EndRoom(session, "conference end", true)
 	// if err != nil {
-	// 	log.Error("err=%v", err)
+	// 	log.Errorf("error: %v", err)
 	// 	return
 	// }
 
@@ -156,7 +156,7 @@ func main() {
 
 	// join room
 	err := connector.Join(
-		sdk.Join{
+		sdk.JoinInfo{
 			Sid:         sid,
 			Uid:         uid,
 			DisplayName: uid,

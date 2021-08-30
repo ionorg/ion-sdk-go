@@ -21,7 +21,7 @@ This example requires you have GStreamer installed, these are the supported plat
 ## Run the application
 
 ```
-go run main.go -addr "localhost:50051" -session "test session"
+go run main.go -addr "localhost:5551" -session "ion"
 ```
 
 ## Customizing your video or audio
@@ -38,8 +38,8 @@ These pipelines work on Linux, they may have issues on other platforms. We would
 
 * a webcam, with computer generated audio.
 
-  `go run main.go -addr "localhost:50051" -session "test session" -video-src "autovideosrc ! video/x-raw, width=320, height=240 ! videoconvert ! queue"`
+  `go run main.go -addr "localhost:5551" -session "ion" -video-src "autovideosrc ! video/x-raw, width=320, height=240 ! videoconvert ! queue"`
 
 * a pre-recorded video, sintel.mkv is available [here](https://durian.blender.org/download/)
 
-  `go run main.go -addr "localhost:50051" -session "test session" -video-src "uridecodebin uri=file:///tmp/sintel.mkv ! videoscale ! video/x-raw, width=320, height=240 ! queue " -audio-src "uridecodebin uri=file:///tmp/sintel.mkv ! queue ! audioconvert"`
+  `go run main.go -addr "localhost:5551" -session "ion" -video-src "uridecodebin uri=file:///tmp/sintel.mkv ! videoscale ! video/x-raw, width=320, height=240 ! queue " -audio-src "uridecodebin uri=file:///tmp/sintel.mkv ! queue ! audioconvert"`

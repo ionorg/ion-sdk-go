@@ -133,9 +133,13 @@ func main() {
 	e := sdk.NewEngine()
 
 	// create a new client from engine
-	c, err := e.NewClient(addr)
+	c, err := e.NewClient(sdk.ClientConfig{
+		Addr: addr,
+		Sid:  session,
+	})
+
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return
 	}
 
@@ -148,7 +152,7 @@ func main() {
 
 	// publish file to session if needed
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 	}
 	select {}
 }

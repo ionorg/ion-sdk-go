@@ -70,7 +70,12 @@ func main() {
 
 	// create a new client from engine
 	cid := fmt.Sprintf("%s_tracktodisk_%s", session, cuid.New())
-	c, err := e.NewClient(addr, cid)
+	c, err := e.NewClient(sdk.ClientConfig{
+		Addr: addr,
+		Sid:  session,
+		Uid:  cid,
+	})
+
 	if err != nil {
 		log.Errorf("sdk.NewClient: err=%v", err)
 		return
@@ -100,7 +105,7 @@ func main() {
 	err = c.Join(session)
 
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 	}
 
 	// Close peer connection on exit

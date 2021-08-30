@@ -43,7 +43,7 @@ func NewWebMProducer(name string, offset int) *WebMProducer {
 	var w webm.WebM
 	reader, err := webm.Parse(r, &w)
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return nil
 	}
 

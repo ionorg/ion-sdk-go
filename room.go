@@ -54,7 +54,7 @@ func NewRoomClient(addr string) *RoomClient {
 	c.roomSignalStream, err = c.roomSignalClient.Signal(c.ctx)
 
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return nil
 	}
 	go c.roomSignalReadLoop()
@@ -107,7 +107,7 @@ func (c *RoomClient) Close() {
 	log.Infof("Close ok")
 }
 
-func (c *RoomClient) Join(j Join) error {
+func (c *RoomClient) Join(j JoinInfo) error {
 	log.Infof("join=%+v", j)
 
 	if j.Sid == "" {
@@ -116,7 +116,7 @@ func (c *RoomClient) Join(j Join) error {
 		return ErrorInvalidParams
 	}
 	if j.Uid == "" {
-		j.Uid = RandomString(6)
+		j.Uid = RandomKey(6)
 	}
 	err := c.roomSignalStream.Send(
 		&room.Request{
@@ -169,8 +169,10 @@ func (c *RoomClient) Leave(sid, uid string) error {
 }
 
 // SendMessage send message
+// from is a uid
+// to is a uid or "all"
 func (c *RoomClient) SendMessage(sid, from, to string, data map[string]interface{}) error {
-	log.Infof("[Room.SendMessage] from=%v, to=%v, data=%v", from, to, data)
+	log.Infof("from=%v, to=%v, data=%v", from, to, data)
 	buf, err := json.Marshal(data)
 	if err != nil {
 		log.Errorf("Marshal msg.data [%v] err=%v", from, err)
@@ -180,7 +182,7 @@ func (c *RoomClient) SendMessage(sid, from, to string, data map[string]interface
 	err = c.roomSignalStream.Send(
 		&room.Request{
 			Payload: &room.Request_SendMessage{
-				&room.SendMessageRequest{
+				SendMessage: &room.SendMessageRequest{
 					Sid: sid,
 					Message: &room.Message{
 						From:    from,
@@ -193,7 +195,7 @@ func (c *RoomClient) SendMessage(sid, from, to string, data map[string]interface
 		},
 	)
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		c.OnError(err)
 		return err
 	}
@@ -291,7 +293,7 @@ func (c *RoomClient) roomSignalReadLoop() error {
 			}
 		case *room.Reply_Disconnect:
 			event := payload.Disconnect
-			log.Info("room.Disconnect: %+v", event)
+			log.Infof("room.Disconnect: %+v", event)
 			if c.OnDisconnect != nil {
 				c.OnDisconnect(event.Sid, event.Reason)
 			}
@@ -302,32 +304,10 @@ func (c *RoomClient) roomSignalReadLoop() error {
 				Name: event.Name,
 				Lock: event.Lock,
 			}
-			log.Info("room.RoomInfo: %+v", info)
+			log.Infof("room.RoomInfo: %+v", info)
 			if c.OnRoomInfo != nil {
 				c.OnRoomInfo(info)
 			}
-
-		// case *room.Message:
-		// event := payload.Message
-		// if c.OnStreamEvent != nil {
-		// var roomSignalClients []*Stream
-		// for _, st := range event.Streams {
-		// roomSignalClient := &Stream{
-		// Id: st.Id,
-		// }
-		// for _, t := range st.Tracks {
-		// track := &Track{
-		// Id:        t.Id,
-		// Label:     t.Label,
-		// Kind:      t.Kind,
-		// Simulcast: t.Simulcast,
-		// }
-		// roomSignalClient.Tracks = append(roomSignalClient.Tracks, track)
-		// }
-		// roomSignalClients = append(roomSignalClients, roomSignalClient)
-		// }
-		// c.OnStreamEvent(StreamState(event.State), event.Sid, event.Uid, roomSignalClients)
-		// }
 		default:
 			break
 		}
