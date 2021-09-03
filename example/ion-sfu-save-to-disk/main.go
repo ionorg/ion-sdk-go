@@ -27,23 +27,16 @@ func main() {
 	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
-	// new sdk engine
-	e := sdk.NewEngine()
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector)
 
-	// create a new client from engine
-	c, err := e.NewClient(sdk.ClientConfig{Addr: addr})
-	if err != nil {
-		log.Errorf("sdk.NewClient: err=%v", err)
-		return
-	}
-
-	c.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+	rtc.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		fmt.Println("Got track")
 		// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
 		go func() {
 			ticker := time.NewTicker(time.Second * 3)
 			for range ticker.C {
-				rtcpSendErr := c.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
+				rtcpSendErr := rtc.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
 				if rtcpSendErr != nil {
 					fmt.Println(rtcpSendErr)
 				}
@@ -100,7 +93,7 @@ func main() {
 	}
 
 	// client join a session
-	err = c.Join(session)
+	err := rtc.Join(session)
 
 	// publish file to session if needed
 	if err != nil {

@@ -2,30 +2,99 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
 
 	room "github.com/pion/ion/apps/room/proto"
 	"github.com/square/go-jose/v3/json"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-type RoomClient struct {
+type Protocol int32
+
+const (
+	Protocol_ProtocolUnknown Protocol = 0
+	Protocol_WebRTC          Protocol = 1
+	Protocol_SIP             Protocol = 2
+	Protocol_RTMP            Protocol = 3
+	Protocol_RTSP            Protocol = 4
+)
+
+type PeerState int32
+
+const (
+	PeerState_JOIN   PeerState = 0
+	PeerState_UPDATE PeerState = 1
+	PeerState_LEAVE  PeerState = 2
+)
+
+type Peer_Direction int32
+
+const (
+	Peer_INCOMING  Peer_Direction = 0
+	Peer_OUTGOING  Peer_Direction = 1
+	Peer_BILATERAL Peer_Direction = 2
+)
+
+type Role int32
+
+const (
+	Role_Host  Role = 0
+	Role_Guest Role = 1
+)
+
+type RoomInfo struct {
+	Sid      string
+	Name     string
+	Password string
+	Lock     bool
+}
+
+type PeerInfo struct {
+	Sid         string
+	Uid         string
+	DisplayName string
+	ExtraInfo   []byte
+	Destination string
+	Role        Role
+	Protocol    Protocol
+	Avatar      string
+	Direction   Peer_Direction
+	Vendor      string
+}
+
+type JoinInfo struct {
+	Sid         string
+	Uid         string
+	DisplayName string
+	ExtraInfo   []byte
+	Destination string
+	Role        Role
+	Protocol    Protocol
+	Avatar      string
+	Direction   Peer_Direction
+	Vendor      string
+}
+
+type Room struct {
+	Service
+	connected bool
+	connector *Connector
+
 	roomServiceClient room.RoomServiceClient
 	roomSignalClient  room.RoomSignalClient
 	roomSignalStream  room.RoomSignal_SignalClient
-	// roomSignalClient            room.Room_SignalClient
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	sync.Mutex
 
-	OnJoin      func(success bool, info RoomInfo, err error)
-	OnLeave     func(success bool, err error)
-	OnPeerEvent func(state PeerState, Peer PeerInfo)
-	// OnStreamEvent      func(state StreamState, sid string, uid string, roomSignalClients []*Stream)
+	OnJoin       func(success bool, info RoomInfo, err error)
+	OnLeave      func(success bool, err error)
+	OnPeerEvent  func(state PeerState, Peer PeerInfo)
 	OnMessage    func(from string, to string, data map[string]interface{})
 	OnDisconnect func(sid, reason string)
 	OnRoomInfo   func(info RoomInfo)
@@ -39,75 +108,253 @@ func GetError(err *room.Error) error {
 	return fmt.Errorf("[%d]: %s", err.Code, err.Reason)
 }
 
-func NewRoomClient(addr string) *RoomClient {
-	c := &RoomClient{}
-	conn, err := grpc.Dial(addr, grpc.WithInsecure(), grpc.WithBlock())
-	if err != nil {
-		log.Errorf("did not connect: %v", err)
-		return nil
+func NewRoom(connector *Connector) *Room {
+	c := &Room{
+		connector: connector,
 	}
-	log.Infof("gRPC connected: %s", addr)
-
-	c.ctx, c.cancel = context.WithCancel(context.Background())
-	c.roomServiceClient = room.NewRoomServiceClient(conn)
-	c.roomSignalClient = room.NewRoomSignalClient(conn)
-	c.roomSignalStream, err = c.roomSignalClient.Signal(c.ctx)
-
-	if err != nil {
-		log.Errorf("error: %v", err)
-		return nil
+	c.connector.RegisterService(c)
+	if !c.Connected() {
+		c.Connect()
 	}
-	go c.roomSignalReadLoop()
 	return c
 }
 
-// CreateRoom create a room
-func (c *RoomClient) CreateRoom(ctx context.Context, req *room.CreateRoomRequest) (*room.CreateRoomReply, error) {
-	return c.roomServiceClient.CreateRoom(c.ctx, req)
+// CreateRoom
+// Params: sid password, at lease a sid
+func (r *Room) CreateRoom(info RoomInfo) error {
+	if info.Sid == "" {
+		return ErrorInvalidParams
+	}
+
+	roomInfo := &room.Room{
+		Sid:      info.Sid,
+		Name:     info.Name,
+		Password: info.Password,
+		Lock:     info.Lock,
+	}
+
+	log.Infof("roomInfo=%+v", roomInfo)
+	reply, err := r.roomServiceClient.CreateRoom(
+		r.ctx,
+		&room.CreateRoomRequest{
+			Room: roomInfo,
+		},
+	)
+
+	log.Infof("reply=%+v err=%v", reply, err)
+	if err != nil {
+		return err
+	}
+	if reply == nil {
+		return ErrorReplyNil
+	}
+	if reply.Success {
+		return nil
+	}
+	return GetError(reply.Error)
 }
 
-// UpdateRoom lock/unlock a room, avoid someone join
-func (c *RoomClient) UpdateRoom(ctx context.Context, req *room.UpdateRoomRequest) (*room.UpdateRoomReply, error) {
-	return c.roomServiceClient.UpdateRoom(c.ctx, req)
+func (r *Room) EndRoom(sid, reason string, delete bool) error {
+	if sid == "" {
+		return ErrorInvalidParams
+	}
+
+	log.Infof("sid=%v reason=%v delete=%v", sid, reason, delete)
+	reply, err := r.roomServiceClient.EndRoom(
+		r.ctx,
+		&room.EndRoomRequest{
+			Sid:    sid,
+			Reason: reason,
+			Delete: delete,
+		},
+	)
+	log.Infof("reply=%+v err=%v", reply, err)
+	if err != nil {
+		return err
+	}
+	if reply == nil {
+		return ErrorReplyNil
+	}
+	if reply.Success {
+		log.Infof("reply success")
+		return nil
+	}
+	return GetError(reply.Error)
 }
 
-// EndRoom delete a room
-func (c *RoomClient) EndRoom(ctx context.Context, req *room.EndRoomRequest) (*room.EndRoomReply, error) {
-	return c.roomServiceClient.EndRoom(c.ctx, req)
+// AddPeer to room, at least a sid
+func (r *Room) AddPeer(peer PeerInfo) error {
+	// at least sid uid
+	if peer.Sid == "" || peer.Uid == "" {
+		return errors.New("invalid params")
+	}
+
+	var protocolType room.Protocol
+	var directionType room.Peer_Direction
+	var roleType room.Role
+
+	info := &room.Peer{
+		Sid:         peer.Sid,
+		Uid:         peer.Uid,
+		Destination: peer.Destination,
+		DisplayName: peer.DisplayName,
+		Role:        roleType,
+		Protocol:    protocolType,
+		Direction:   directionType,
+	}
+	log.Infof("info=%+v", info)
+	reply, err := r.roomServiceClient.AddPeer(
+		r.ctx,
+		&room.AddPeerRequest{
+			Peer: info,
+		},
+	)
+	log.Infof("reply=%+v err=%v", reply, err)
+	if err != nil {
+		return err
+	}
+	if reply == nil {
+		return ErrorReplyNil
+	}
+	if reply.Success {
+		log.Infof("reply success")
+		return nil
+	}
+	return GetError(reply.Error)
 }
 
-// GetRooms get all rooms
-func (c *RoomClient) GetRooms(ctx context.Context, req *room.GetRoomsRequest) (*room.GetRoomsReply, error) {
-	return c.roomServiceClient.GetRooms(c.ctx, req)
+func (r *Room) RemovePeer(sid, uid string) error {
+	// at least sid uid
+	if sid == "" || uid == "" {
+		return errors.New("invalid params")
+	}
+	req := &room.RemovePeerRequest{
+		Sid: sid,
+		Uid: uid,
+	}
+	log.Infof("req=%+v", req)
+	reply, err := r.roomServiceClient.RemovePeer(r.ctx, req)
+	if err != nil {
+		return err
+	}
+	if reply == nil {
+		return ErrorReplyNil
+	}
+	if reply.Success {
+		return nil
+	}
+	return GetError(reply.Error)
 }
 
-// AddPeer add a Peer
-func (c *RoomClient) AddPeer(ctx context.Context, req *room.AddPeerRequest) (*room.AddPeerReply, error) {
-	return c.roomServiceClient.AddPeer(c.ctx, req)
+func (r *Room) UpdatePeer(peer PeerInfo) error {
+	// at least sid uid
+	if peer.Sid == "" || peer.Uid == "" {
+		return ErrorInvalidParams
+	}
+
+	info := &room.Peer{
+		Sid:         peer.Sid,
+		Uid:         peer.Uid,
+		Destination: peer.Destination,
+		DisplayName: peer.DisplayName,
+		Role:        room.Role(peer.Role),
+		Protocol:    room.Protocol(peer.Protocol),
+		Direction:   room.Peer_Direction(peer.Direction),
+	}
+	log.Infof("info=%+v", info)
+	reply, err := r.roomServiceClient.UpdatePeer(
+		r.ctx,
+		&room.UpdatePeerRequest{
+			Peer: info,
+		},
+	)
+	log.Infof("reply=%+v err=%v", reply, err)
+	if err != nil {
+		return err
+	}
+	if reply == nil {
+		return ErrorReplyNil
+	}
+	if reply.Success {
+		return nil
+	}
+	return GetError(reply.Error)
 }
 
-// RemovePeer remove a Peer
-func (c *RoomClient) RemovePeer(ctx context.Context, req *room.RemovePeerRequest) (*room.RemovePeerReply, error) {
-	return c.roomServiceClient.RemovePeer(c.ctx, req)
+func (r *Room) GetPeers(sid string) []PeerInfo {
+	var infos []PeerInfo
+	if sid == "" {
+		return infos
+	}
+	reply, err := r.roomServiceClient.GetPeers(
+		r.ctx,
+		&room.GetPeersRequest{
+			Sid: sid,
+		},
+	)
+
+	if err != nil || reply == nil {
+		log.Errorf("error: %v", err)
+		return infos
+	}
+	log.Infof("peers=%+v", reply.Peers)
+	for _, p := range reply.Peers {
+		infos = append(infos, PeerInfo{
+			Sid:         p.Sid,
+			Uid:         p.Uid,
+			DisplayName: p.DisplayName,
+			ExtraInfo:   p.ExtraInfo,
+			Destination: p.Destination,
+			Role:        Role(p.Role),
+			Protocol:    Protocol(p.Protocol),
+			Avatar:      p.Avatar,
+			Direction:   Peer_Direction(p.Direction),
+			Vendor:      p.Vendor,
+		})
+	}
+	log.Infof("infos=%+v", infos)
+	return infos
 }
 
-// GetPeers get all Peers
-func (c *RoomClient) GetPeers(ctx context.Context, req *room.GetPeersRequest) (*room.GetPeersReply, error) {
-	return c.roomServiceClient.GetPeers(c.ctx, req)
+func (r *Room) UpdateRoom(info RoomInfo) error {
+	if info.Sid == "" {
+		return errors.New("invalid params")
+	}
+
+	roomInfo := &room.Room{
+		Sid:      info.Sid,
+		Name:     info.Name,
+		Lock:     info.Lock,
+		Password: info.Password,
+	}
+	log.Infof("roomInfo=%+v", roomInfo)
+	reply, err := r.roomServiceClient.UpdateRoom(
+		r.ctx,
+		&room.UpdateRoomRequest{
+			Room: roomInfo,
+		},
+	)
+
+	log.Infof("reply=%+v err=%v", reply, err)
+	if err != nil {
+		return err
+	}
+	if reply == nil {
+		return ErrorReplyNil
+	}
+	if reply.Success {
+		return nil
+	}
+	return GetError(reply.Error)
 }
 
-// EditPeerInfo ..
-func (c *RoomClient) UpdatePeer(ctx context.Context, req *room.UpdatePeerRequest) (*room.UpdatePeerReply, error) {
-	return c.roomServiceClient.UpdatePeer(c.ctx, req)
-}
-
-func (c *RoomClient) Close() {
+func (c *Room) Close() {
 	c.cancel()
-	c.roomSignalStream.CloseSend()
+	_ = c.roomSignalStream.CloseSend()
 	log.Infof("Close ok")
 }
 
-func (c *RoomClient) Join(j JoinInfo) error {
+func (c *Room) Join(j JoinInfo) error {
 	log.Infof("join=%+v", j)
 
 	if j.Sid == "" {
@@ -148,7 +395,7 @@ func (c *RoomClient) Join(j JoinInfo) error {
 }
 
 // Leave from one session
-func (c *RoomClient) Leave(sid, uid string) error {
+func (c *Room) Leave(sid, uid string) error {
 	log.Infof("uid=%v", uid)
 	err := c.roomSignalStream.Send(
 		&room.Request{
@@ -171,7 +418,7 @@ func (c *RoomClient) Leave(sid, uid string) error {
 // SendMessage send message
 // from is a uid
 // to is a uid or "all"
-func (c *RoomClient) SendMessage(sid, from, to string, data map[string]interface{}) error {
+func (c *Room) SendMessage(sid, from, to string, data map[string]interface{}) error {
 	log.Infof("from=%v, to=%v, data=%v", from, to, data)
 	buf, err := json.Marshal(data)
 	if err != nil {
@@ -203,7 +450,7 @@ func (c *RoomClient) SendMessage(sid, from, to string, data map[string]interface
 	return nil
 }
 
-func (c *RoomClient) roomSignalReadLoop() error {
+func (c *Room) roomSignalReadLoop() error {
 	for {
 		res, err := c.roomSignalStream.Recv()
 		if err != nil {
@@ -225,16 +472,18 @@ func (c *RoomClient) roomSignalReadLoop() error {
 			}
 
 			log.Errorf("Error receiving room response: %v", err)
-			c.OnError(err)
+			if c.OnError != nil {
+				c.OnError(err)
+			}
+
 			return err
 		}
 
-		log.Infof("RoomClient.roomSignalReadLoop reply %v", res)
+		log.Infof("Room.roomSignalReadLoop reply %v", res)
 
 		switch payload := res.Payload.(type) {
 		case *room.Reply_Join:
 			reply := payload.Join
-			log.Infof("reply=====%+v", reply)
 			if c.OnJoin == nil {
 				log.Errorf("c.OnJoin is nil")
 				continue
@@ -312,4 +561,27 @@ func (c *RoomClient) roomSignalReadLoop() error {
 			break
 		}
 	}
+}
+
+func (c *Room) Name() string {
+	return "Room"
+}
+
+func (c *Room) Connect() {
+	var err error
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+	c.roomServiceClient = room.NewRoomServiceClient(c.connector.grpcConn)
+	c.roomSignalClient = room.NewRoomSignalClient(c.connector.grpcConn)
+	c.roomSignalStream, err = c.roomSignalClient.Signal(c.ctx)
+
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
+	go c.roomSignalReadLoop()
+	c.connected = true
+}
+
+func (c *Room) Connected() bool {
+	return c.connected
 }

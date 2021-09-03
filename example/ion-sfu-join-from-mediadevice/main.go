@@ -32,26 +32,13 @@ func main() {
 	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
-	// new sdk engine
-	e := sdk.NewEngine()
-
-	// get a client from engine
-	c, err := e.NewClient(sdk.ClientConfig{
-		Addr: addr,
-		Sid:  session,
-	})
-
-	c.GetPubTransport().GetPeerConnection().OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector)
+	rtc.GetPubTransport().GetPeerConnection().OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Infof("Connection state changed: %s", state)
 	})
 
-	if err != nil {
-		log.Errorf("client err=%v", err)
-		panic(err)
-	}
-
-	// client join a session
-	err = c.Join(session)
+	err := rtc.Join(session)
 
 	if err != nil {
 		log.Errorf("join err=%v", err)
@@ -88,7 +75,7 @@ func main() {
 			fmt.Printf("Track (ID: %s) ended with error: %v\n",
 				track.ID(), err)
 		})
-		_, err = c.Publish(track)
+		_, err = rtc.Publish(track)
 		if err != nil {
 			panic(err)
 		} else {

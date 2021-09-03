@@ -102,6 +102,6 @@ func getPublisherMediaEngine(mime string) (*webrtc.MediaEngine, error) {
 
 func getSubscriberMediaEngine() (*webrtc.MediaEngine, error) {
 	me := &webrtc.MediaEngine{}
-	me.RegisterDefaultCodecs()
+	_ = me.RegisterDefaultCodecs()
 	return me, nil
 }

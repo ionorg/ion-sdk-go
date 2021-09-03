@@ -54,38 +54,30 @@ func main() {
 	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.Parse()
 
-	// init log
 	log.Init(logLevel)
 
-	// new sdk engine
-	e := sdk.NewEngine()
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector)
 
-	// create a new client from engine
-	c, err := e.NewClient(sdk.ClientConfig{
-		Addr: addr,
-		Sid:  session,
-	})
-
-	if err != nil {
-		log.Errorf("error: %v", err)
-		return
-	}
 	// user define receiving rtp
-	c.OnTrack = saveToDisk
+	rtc.OnTrack = saveToDisk
 
-	// user define subscription, default: subscribe all track event
-	// c.OnTrackEvent = func(event sdk.TrackEvent) {
-	// }
+	rtc.OnDataChannel = func(dc *webrtc.DataChannel) {
+		log.Infof("dc: %v", dc.Label())
+	}
 
-	// client join a session
-	err = c.Join(session)
+	rtc.OnError = func(err error) {
+		log.Errorf("err: %v", err)
+	}
+
+	err := rtc.Join(session)
 	if err != nil {
 		log.Errorf("error: %v", err)
 		return
 	}
 
 	// publish file to session if needed
-	err = c.PublishFile(file, true, true)
+	err = rtc.PublishFile(file, true, true)
 	if err != nil {
 		log.Errorf("error: %v", err)
 		return

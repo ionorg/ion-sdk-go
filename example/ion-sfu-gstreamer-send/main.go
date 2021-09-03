@@ -25,20 +25,14 @@ func main() {
 	flag.Parse()
 
 	// new sdk engine
-	sdk.DefaultConfig.WebRTC.VideoMime = sdk.MimeTypeVP8
-	sdk.DefaultConfig.LogLevel = "info"
-	e := sdk.NewEngine()
-
-	// get a client from engine
-	c, err := e.NewClient(sdk.ClientConfig{
-		Addr: addr,
-		Sid:  session,
-	})
-
-	if err != nil {
-		log.Errorf("sdk.NewClient error : %v", err)
-		return
+	config := sdk.RTCConfig{
+		WebRTC: sdk.WebRTCTransportConfig{
+			VideoMime: sdk.MimeTypeVP8,
+		},
 	}
+
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector, config)
 
 	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: "video/vp8"}, "video", "pion2")
 	if err != nil {
@@ -50,13 +44,13 @@ func main() {
 		panic(err)
 	}
 	// client join a session
-	err = c.Join(session)
+	err = rtc.Join(session)
 
 	if err != nil {
 		log.Errorf("join err=%v", err)
 		panic(err)
 	}
-	_, _ = c.Publish(videoTrack, audioTrack)
+	_, _ = rtc.Publish(videoTrack, audioTrack)
 
 	// Start pushing buffers on these tracks
 	gst.CreatePipeline("opus", []*webrtc.TrackLocalStaticSample{audioTrack}, *audioSrc).Start()

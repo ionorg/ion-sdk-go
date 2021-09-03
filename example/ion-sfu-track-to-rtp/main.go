@@ -10,7 +10,6 @@ import (
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/webrtc/v3"
 
-	//"github.com/pion/rtcp"
 	"os/exec"
 
 	"github.com/pion/rtp"
@@ -33,7 +32,7 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 
 	cmd := exec.Command("cat", track_sdp)
 	output, err := cmd.Output()
-	log.Infof("output", track_sdp, output, err)
+	log.Info("output", track_sdp, output, err)
 	// Prepare udp conns
 	// Also update incoming packets with expected PayloadType, the browser may use
 	// a different value. We have to modify so our stream matches what rtp-forwarder.sdp expects
@@ -129,26 +128,14 @@ func main() {
 	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
-	// new sdk engine
-	e := sdk.NewEngine()
-
-	// create a new client from engine
-	c, err := e.NewClient(sdk.ClientConfig{
-		Addr: addr,
-		Sid:  session,
-	})
-
-	if err != nil {
-		log.Errorf("error: %v", err)
-		return
-	}
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector)
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
-	c.OnTrack = trackToRTP
+	rtc.OnTrack = trackToRTP
 
-	// client join a session
-	err = c.Join(session)
+	err := rtc.Join(session)
 
 	// publish file to session if needed
 	if err != nil {

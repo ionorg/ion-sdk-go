@@ -28,134 +28,148 @@ func init() {
 
 func main() {
 	// parse flag
-	var session, addr string
+	var session, addr, cafile string
+	var ssl bool
 	flag.StringVar(&addr, "addr", "localhost:5551", "ion-cluster grpc addr")
 	flag.StringVar(&session, "session", sid, "join session name")
+	flag.BoolVar(&ssl, "ssl", false, "use ssl or not")
+	flag.StringVar(&cafile, "cafile", "", "ssl ca file name")
 	flag.Parse()
 
-	config := sdk.IonConnectorConfig{}
-	connector := sdk.NewIonConnector(addr, uid, config)
+	connector := sdk.NewConnector(addr)
 
-	// // THIS IS ROOM MANAGEMENT API
-	// // ==========================
-	// // create room
-	// err := connector.CreateRoom(sdk.RoomInfo{Sid: session})
-	// if err != nil {
-	// 	log.Errorf("error:%v", err)
-	// 	return
-	// }
+	room := sdk.NewRoom(connector)
 
-	// // add peer to room
-	// err = connector.AddPeer(sdk.PeerInfo{Sid: session, Uid: uid})
-	// if err != nil {
-	// 	log.Errorf("error: %v", err)
-	// 	return
-	// }
+	// THIS IS ROOM MANAGEMENT API
+	// ==========================
+	// create room
+	err := room.CreateRoom(sdk.RoomInfo{Sid: session})
+	if err != nil {
+		log.Errorf("error:%v", err)
+		return
+	}
 
-	// // get peers from room
-	// peers := connector.GetPeers(session)
-	// log.Infof(" peers=%+v", peers)
+	// add peer to room
+	err = room.AddPeer(sdk.PeerInfo{Sid: session, Uid: uid})
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
 
-	// // update peer in room
-	// err = connector.UpdatePeer(sdk.PeerInfo{Sid: session, Uid: uid, DisplayName: "name"})
-	// if err != nil {
-	// 	log.Errorf("error: %v", err)
-	// 	return
-	// }
+	// get peers from room
+	peers := room.GetPeers(session)
+	log.Infof("peers=%+v", peers)
 
-	// time.Sleep(3 * time.Second)
+	// update peer in room
+	err = room.UpdatePeer(sdk.PeerInfo{Sid: session, Uid: uid, DisplayName: "name"})
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
 
-	// // remove peer from room
-	// err = connector.RemovePeer(session, uid)
-	// if err != nil {
-	// 	log.Errorf("error: %v", err)
-	// 	return
-	// }
+	time.Sleep(3 * time.Second)
 
-	// // lock room
-	// err = connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: true})
-	// if err != nil {
-	// 	log.Errorf("error: %v", err)
-	// 	return
-	// }
+	// remove peer from room
+	err = room.RemovePeer(session, uid)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
 
-	// // unlock room
-	// err = connector.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: false})
-	// if err != nil {
-	// 	log.Errorf("error: %v", err)
-	// 	return
-	// }
+	// lock room
+	err = room.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: true})
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
 
-	// // end room
-	// err = connector.EndRoom(session, "conference end", true)
-	// if err != nil {
-	// 	log.Errorf("error: %v", err)
-	// 	return
-	// }
+	// unlock room
+	err = room.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: false})
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
+
+	// end room
+	err = room.EndRoom(session, "conference end", true)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
 
 	// THIS IS ROOM SINGAL API
 	// ===============================
-	connector.OnError = func(err error) {
-		log.Errorf("OnError %v", err)
-	}
-
-	connector.OnJoin = func(success bool, info sdk.RoomInfo, err error) {
+	room.OnJoin = func(success bool, info sdk.RoomInfo, err error) {
 		log.Infof("OnJoin success = %v, info = %v, err = %v", success, info, err)
-	}
-
-	connector.OnLeave = func(success bool, err error) {
-		log.Infof("OnLeave success = %v err = %v", success, err)
-	}
-
-	connector.OnPeerEvent = func(state sdk.PeerState, peer sdk.PeerInfo) {
-		log.Infof("OnPeerEvent state = %v, peer = %v", state, peer)
-	}
-
-	connector.OnMessage = func(from string, to string, data map[string]interface{}) {
-		log.Infof("OnMessage from = %v, to = %v, data = %v", from, to, data)
-	}
-
-	connector.OnDisconnect = func(sid, reason string) {
-		log.Infof("OnDisconnect sid = %v, reason = %v", sid, reason)
-	}
-
-	connector.OnRoomInfo = func(info sdk.RoomInfo) {
-		log.Infof("OnRoomInfo info=%v", info)
-	}
-
-	// subscribe rtp from sessoin
-	// comment this if you don't need save to file
-	connector.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
-		go func() {
-			ticker := time.NewTicker(time.Second * 3)
-			for range ticker.C {
-				rtcpSendErr := connector.SFU().GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
-				if rtcpSendErr != nil {
-					fmt.Println(rtcpSendErr)
+		rtc := sdk.NewRTC(connector)
+		// subscribe rtp from sessoin
+		// comment this if you don't need save to file
+		rtc.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+			// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
+			go func() {
+				ticker := time.NewTicker(time.Second * 3)
+				for range ticker.C {
+					rtcpSendErr := rtc.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
+					if rtcpSendErr != nil {
+						fmt.Println(rtcpSendErr)
+					}
 				}
-			}
-		}()
+			}()
 
-		codecName := strings.Split(track.Codec().RTPCodecCapability.MimeType, "/")[1]
-		fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
-		pipeline := gst.CreatePipeline(strings.ToLower(codecName))
-		pipeline.Start()
-		defer pipeline.Stop()
-		buf := make([]byte, 1400)
-		for {
-			i, _, readErr := track.Read(buf)
-			if readErr != nil {
-				log.Errorf("%v", readErr)
-				return
-			}
+			codecName := strings.Split(track.Codec().RTPCodecCapability.MimeType, "/")[1]
+			fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
+			pipeline := gst.CreatePipeline(strings.ToLower(codecName))
+			pipeline.Start()
+			defer pipeline.Stop()
+			buf := make([]byte, 1400)
+			for {
+				i, _, readErr := track.Read(buf)
+				if readErr != nil {
+					log.Errorf("%v", readErr)
+					return
+				}
 
-			pipeline.Push(buf[:i])
+				pipeline.Push(buf[:i])
+			}
+		}
+
+		rtc.OnDataChannel = func(dc *webrtc.DataChannel) {
+			log.Infof("dc: %v", dc.Label())
+		}
+
+		rtc.OnError = func(err error) {
+			log.Errorf("err: %v", err)
+		}
+
+		err = rtc.Join(info.Sid)
+		if err != nil {
+			log.Errorf("error: %v", err)
+			return
 		}
 	}
 
+	room.OnLeave = func(success bool, err error) {
+		log.Infof("OnLeave success = %v err = %v", success, err)
+	}
+
+	room.OnPeerEvent = func(state sdk.PeerState, peer sdk.PeerInfo) {
+		log.Infof("OnPeerEvent state = %v, peer = %v", state, peer)
+	}
+
+	room.OnMessage = func(from string, to string, data map[string]interface{}) {
+		log.Infof("OnMessage from = %v, to = %v, data = %v", from, to, data)
+	}
+
+	room.OnDisconnect = func(sid, reason string) {
+		log.Infof("OnDisconnect sid = %v, reason = %v", sid, reason)
+	}
+
+	room.OnRoomInfo = func(info sdk.RoomInfo) {
+		log.Infof("OnRoomInfo info=%v", info)
+	}
+
 	// join room
-	err := connector.Join(
+	err = room.Join(
 		sdk.JoinInfo{
 			Sid:         sid,
 			Uid:         uid,

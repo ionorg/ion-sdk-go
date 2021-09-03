@@ -8,7 +8,7 @@ import (
 // Transport is pub/sub transport
 type Transport struct {
 	api            *webrtc.DataChannel
-	signal         *Signal
+	rtc            *RTC
 	pc             *webrtc.PeerConnection
 	role           Target
 	SendCandidates []*webrtc.ICECandidate
@@ -16,18 +16,20 @@ type Transport struct {
 }
 
 // NewTransport create a transport
-func NewTransport(role Target, signal *Signal) *Transport {
+func NewTransport(role Target, rtc *RTC) *Transport {
 	t := &Transport{
-		role:   role,
-		signal: signal,
+		role: role,
+		rtc:  rtc,
 	}
-
+	if rtc.config == nil {
+		rtc.config = &DefaultConfig
+	}
 	var err error
 	var api *webrtc.API
 	var me *webrtc.MediaEngine
-	DefaultConfig.WebRTC.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
+	rtc.config.WebRTC.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
 	if role == Target_PUBLISHER {
-		me, err = getPublisherMediaEngine(DefaultConfig.WebRTC.VideoMime)
+		me, err = getPublisherMediaEngine(rtc.config.WebRTC.VideoMime)
 	} else {
 		me, err = getSubscriberMediaEngine()
 	}
@@ -37,8 +39,8 @@ func NewTransport(role Target, signal *Signal) *Transport {
 		return nil
 	}
 
-	api = webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(DefaultConfig.WebRTC.Setting))
-	t.pc, err = api.NewPeerConnection(DefaultConfig.WebRTC.Configuration)
+	api = webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(rtc.config.WebRTC.Setting))
+	t.pc, err = api.NewPeerConnection(rtc.config.WebRTC.Configuration)
 
 	if err != nil {
 		log.Errorf("NewPeerConnection error: %v", err)
@@ -65,10 +67,10 @@ func NewTransport(role Target, signal *Signal) *Transport {
 			t.SendCandidates = append(t.SendCandidates, c)
 		} else {
 			for _, cand := range t.SendCandidates {
-				t.signal.trickle(cand, role)
+				t.rtc.SendTrickle(cand, role)
 			}
 			t.SendCandidates = []*webrtc.ICECandidate{}
-			t.signal.trickle(c, role)
+			t.rtc.SendTrickle(c, role)
 		}
 	})
 	return t
