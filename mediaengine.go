@@ -13,7 +13,12 @@ const (
 )
 
 var (
-	videoRTCPFeedback       = []webrtc.RTCPFeedback{{"goog-remb", ""}, {"ccm", "fir"}, {"nack", ""}, {"nack", "pli"}}
+	videoRTCPFeedback = []webrtc.RTCPFeedback{
+		{Type: webrtc.TypeRTCPFBGoogREMB, Parameter: ""},
+		{Type: webrtc.TypeRTCPFBCCM, Parameter: "fir"},
+		{Type: webrtc.TypeRTCPFBNACK, Parameter: ""},
+		{Type: webrtc.TypeRTCPFBNACK, Parameter: "pli"},
+	}
 	videoRTPCodecParameters = []webrtc.RTPCodecParameters{
 		{
 			RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: MimeTypeVP8, ClockRate: 90000, RTCPFeedback: videoRTCPFeedback},

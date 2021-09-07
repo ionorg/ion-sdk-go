@@ -93,7 +93,7 @@ func main() {
 	}
 
 	// client join a session
-	err := rtc.Join(session)
+	err := rtc.Join(session, sdk.RandomKey(4))
 
 	// publish file to session if needed
 	if err != nil {

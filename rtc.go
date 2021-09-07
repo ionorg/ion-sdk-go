@@ -130,10 +130,6 @@ type RTC struct {
 	recvByte int
 	notify   chan struct{}
 
-	//cache remote sid for subscribe/unsubscribe
-	streamLock     sync.RWMutex
-	remoteStreamId map[string]string
-
 	//cache datachannel api operation before dr.OnOpen
 	apiQueue []Call
 
@@ -148,8 +144,7 @@ type RTC struct {
 
 func NewRTC(connector *Connector, config ...RTCConfig) *RTC {
 	r := &RTC{
-		connector:      connector,
-		remoteStreamId: make(map[string]string),
+		connector: connector,
 	}
 
 	if len(config) > 0 {
@@ -166,14 +161,15 @@ func NewRTC(connector *Connector, config ...RTCConfig) *RTC {
 }
 
 // Join client join a session
-func (r *RTC) Join(sid string, config ...JoinConfig) error {
-	log.Debugf("[Client.Join] sid=%v uid=%v", sid, r.uid)
+func (r *RTC) Join(sid, uid string, config ...*JoinConfig) error {
+	log.Infof("sid=%v uid=%v", sid, uid)
+	if uid == "" {
+		uid = RandomKey(6)
+	}
+	r.uid = uid
 	r.sub.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		log.Debugf("[r.sub.pc.OnTrack] got track streamId=%v kind=%v ssrc=%v ", track.StreamID(), track.Kind(), track.SSRC())
-		r.streamLock.Lock()
-		r.remoteStreamId[track.StreamID()] = track.StreamID()
-		log.Debugf("id=%v len(r.remoteStreamId)=%+v", r.uid, len(r.remoteStreamId))
-		r.streamLock.Unlock()
+		log.Infof("got track streamId=%v kind=%v ssrc=%v ", track.StreamID(), track.Kind(), track.SSRC())
+
 		// user define
 		if r.OnTrack != nil {
 			r.OnTrack(track, receiver)
@@ -249,7 +245,7 @@ func (r *RTC) Join(sid string, config ...JoinConfig) error {
 	}
 
 	if len(config) > 0 {
-		err = r.SendJoin(sid, r.uid, offer, config[0])
+		err = r.SendJoin(sid, r.uid, offer, *config[0])
 	} else {
 		err = r.SendJoin(sid, r.uid, offer, nil)
 	}
@@ -819,6 +815,69 @@ func (r *RTC) Subscribe(trackInfos []*Subscription) error {
 		},
 	)
 	return err
+}
+
+// SubscribeFromEvent will parse event and subscribe what you want
+func (r *RTC) SubscribeFromEvent(event TrackEvent, audio, video bool, layer string) error {
+	log.Infof("OnTrackEvent===: %+v", event)
+	if event.State == TrackEvent_UPDATE {
+		return nil
+	}
+
+	var sub bool
+	if event.State == TrackEvent_ADD {
+		sub = true
+	}
+
+	var infos []*Subscription
+	for _, t := range event.Tracks {
+		// sub audio or not
+		if audio && t.Kind == "audio" {
+			infos = append(infos, &Subscription{
+				TrackId:   t.Id,
+				Mute:      t.Muted,
+				Subscribe: sub,
+				Layer:     t.Layer,
+			})
+			continue
+		}
+		// sub one layer
+		if layer != "" && t.Kind == "video" && t.Layer == layer {
+			infos = append(infos, &Subscription{
+				TrackId:   t.Id,
+				Mute:      t.Muted,
+				Subscribe: sub,
+				Layer:     t.Layer,
+			})
+			continue
+		}
+		// sub all if not set simulcast
+		if t.Kind == "video" && layer == "" {
+			infos = append(infos, &Subscription{
+				TrackId:   t.Id,
+				Mute:      t.Muted,
+				Subscribe: sub,
+				Layer:     t.Layer,
+			})
+		}
+	}
+	// sub video if publisher event not setting simulcast layer
+	if len(infos) == 1 {
+		for _, t := range event.Tracks {
+			if t.Kind == "video" {
+				infos = append(infos, &Subscription{
+					TrackId:   t.Id,
+					Mute:      t.Muted,
+					Subscribe: sub,
+					Layer:     t.Layer,
+				})
+			}
+		}
+	}
+	for _, i := range infos {
+		log.Infof("Subscribe/UnSubscribe infos=%+v", i)
+	}
+	return r.Subscribe(infos)
 }
 
 // Close client close

@@ -38,8 +38,6 @@ func NewEngine(addr string) *Engine {
 		clients:   make(map[string]map[string]*sdk.RTC),
 		connector: sdk.NewConnector(addr),
 	}
-	ilog.Init("info")
-	log = ilog.NewLoggerWithFields(ilog.InfoLevel, "engine", nil)
 
 	se := webrtc.SettingEngine{}
 	se.SetEphemeralUDPPortRange(10000, 15000)
@@ -49,7 +47,7 @@ func NewEngine(addr string) *Engine {
 			Setting:   se,
 			Configuration: webrtc.Configuration{
 				ICEServers: []webrtc.ICEServer{
-					webrtc.ICEServer{
+					{
 						URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
 					},
 				},
@@ -148,7 +146,7 @@ func run(e *Engine, addr, session, file, role string, total, duration, cycle int
 			cid := fmt.Sprintf("%s_pubsub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
 			c := e.AddClient(session, cid)
-			err := c.Join(session)
+			err := c.Join(session, cid)
 			if err != nil {
 				log.Errorf("error: %v", err)
 				break
@@ -163,56 +161,16 @@ func run(e *Engine, addr, session, file, role string, total, duration, cycle int
 			cid := fmt.Sprintf("%s_sub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
 			c := e.AddClient(session, cid)
-			err := c.Join(session)
+
+			c.OnTrackEvent = func(event sdk.TrackEvent) {
+				_ = c.SubscribeFromEvent(event, audio, video, simulcast)
+			}
+
+			config := sdk.NewJoinConfig().SetNoAutoSubscribe()
+			err := c.Join(session, cid, config)
 
 			if err != nil {
 				log.Errorf("%v", err)
-				break
-			}
-
-			c.OnTrackEvent = func(event sdk.TrackEvent) {
-				log.Infof("OnTrackEvent===: %+v", event)
-				var infos []*sdk.Subscription
-				for _, t := range event.Tracks {
-					// sub audio or not
-					if audio && t.Kind == "audio" {
-						infos = append(infos, &sdk.Subscription{
-							TrackId:   t.Id,
-							Mute:      t.Muted,
-							Subscribe: true,
-							Layer:     t.Layer,
-						})
-						continue
-					}
-					// sub one layer
-					if simulcast != "" && t.Kind == "video" && t.Layer == simulcast {
-						infos = append(infos, &sdk.Subscription{
-							TrackId:   t.Id,
-							Mute:      t.Muted,
-							Subscribe: true,
-							Layer:     t.Layer,
-						})
-						continue
-					}
-					// sub all if not set simulcast
-					if t.Kind == "video" && simulcast == "" {
-						infos = append(infos, &sdk.Subscription{
-							TrackId:   t.Id,
-							Mute:      t.Muted,
-							Subscribe: true,
-							Layer:     t.Layer,
-						})
-					}
-				}
-				err = c.Subscribe(infos)
-				if err != nil {
-					log.Errorf("error: %v", err)
-				}
-			}
-
-			err = c.Join(session)
-			if err != nil {
-				log.Errorf("error: %v", err)
 				break
 			}
 
@@ -220,13 +178,13 @@ func run(e *Engine, addr, session, file, role string, total, duration, cycle int
 			cid := fmt.Sprintf("%s_pub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
 			c := e.AddClient(session, cid)
-			err := c.Join(session)
+			err := c.Join(session, cid)
 			if err != nil {
 				log.Errorf("%v", err)
 				break
 			}
 			config := sdk.NewJoinConfig().SetNoAutoSubscribe()
-			err = c.Join(session, *config)
+			err = c.Join(session, cid, config)
 			if err != nil {
 				log.Errorf("error: %v", err)
 				break
@@ -278,6 +236,7 @@ func main() {
 	default:
 		log.SetLevel(logrus.DebugLevel)
 	}
+	sdk.InitLog("debug")
 
 	e := NewEngine(gaddr)
 	if paddr != "" {

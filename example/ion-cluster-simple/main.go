@@ -141,7 +141,7 @@ func main() {
 			log.Errorf("err: %v", err)
 		}
 
-		err = rtc.Join(info.Sid)
+		err = rtc.Join(info.Sid, sdk.RandomKey(4))
 		if err != nil {
 			log.Errorf("error: %v", err)
 			return

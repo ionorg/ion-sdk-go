@@ -70,7 +70,7 @@ func main() {
 		log.Errorf("err: %v", err)
 	}
 
-	err := rtc.Join(session)
+	err := rtc.Join(session, sdk.RandomKey(4))
 	if err != nil {
 		log.Errorf("error: %v", err)
 		return

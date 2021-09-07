@@ -38,7 +38,7 @@ func main() {
 		log.Infof("Connection state changed: %s", state)
 	})
 
-	err := rtc.Join(session)
+	err := rtc.Join(session, sdk.RandomKey(4))
 
 	if err != nil {
 		log.Errorf("join err=%v", err)
