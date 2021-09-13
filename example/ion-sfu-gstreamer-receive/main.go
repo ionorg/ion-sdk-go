@@ -69,7 +69,14 @@ func runClientLoop(addr, session string) {
 
 		codecName := strings.Split(track.Codec().RTPCodecCapability.MimeType, "/")[1]
 		fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
-		pipeline := gst.CreatePipeline(strings.ToLower(codecName))
+		sink := "fakesink"
+		switch track.Kind() {
+		case webrtc.RTPCodecTypeAudio:
+			sink = "autoaudiosink"
+		case webrtc.RTPCodecTypeVideo:
+			sink = "autovideosink"
+		}
+		pipeline := gst.CreatePipeline(strings.ToLower(codecName), sink)
 		pipeline.Start()
 		defer pipeline.Stop()
 		buf := make([]byte, 1400)
