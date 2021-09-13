@@ -76,7 +76,7 @@ func runClientLoop(addr, session string) {
 		case webrtc.RTPCodecTypeVideo:
 			sink = "autovideosink"
 		}
-		pipeline := gst.CreatePipeline(strings.ToLower(codecName), "auto)
+		pipeline := gst.CreatePipeline(strings.ToLower(codecName), sink)
 		pipeline.Start()
 		defer pipeline.Stop()
 		buf := make([]byte, 1400)
