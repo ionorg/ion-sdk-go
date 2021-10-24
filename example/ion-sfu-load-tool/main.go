@@ -67,6 +67,10 @@ func (e *Engine) AddClient(sid, cid string) *sdk.RTC {
 
 	c := sdk.NewRTC(e.connector)
 	e.clients[sid][cid] = c
+	c.OnError = func(err error) {
+		log.Errorf("engine got error: %v", err)
+		e.DelClient(sid, cid)
+	}
 	return c
 }
 

@@ -229,7 +229,7 @@ func (r *RTC) Join(sid, uid string, config ...*JoinConfig) error {
 
 	r.sub.pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		if state >= webrtc.ICEConnectionStateDisconnected {
-			log.Infof("ICEConnectionStateDisconnected delClient %v", r)
+			log.Infof("ICEConnectionStateDisconnected %v", state)
 
 		}
 	})
@@ -601,6 +601,9 @@ func (r *RTC) onSingalHandle() error {
 			}
 
 			log.Errorf("[%v] Error receiving RTC response: %v", r.uid, err)
+			if r.OnError != nil {
+				r.OnError(err)
+			}
 			return err
 		}
 
@@ -882,7 +885,7 @@ func (r *RTC) SubscribeFromEvent(event TrackEvent, audio, video bool, layer stri
 
 // Close client close
 func (r *RTC) Close() {
-	log.Debugf("id=%v", r.uid)
+	log.Infof("id=%v", r.uid)
 	close(r.notify)
 	if r.pub != nil {
 		r.pub.pc.Close()
