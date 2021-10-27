@@ -162,13 +162,13 @@ func NewRTC(connector *Connector, config ...RTCConfig) *RTC {
 
 // Join client join a session
 func (r *RTC) Join(sid, uid string, config ...*JoinConfig) error {
-	log.Infof("sid=%v uid=%v", sid, uid)
+	log.Infof("[C=>S] sid=%v uid=%v", sid, uid)
 	if uid == "" {
 		uid = RandomKey(6)
 	}
 	r.uid = uid
 	r.sub.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		log.Infof("got track streamId=%v kind=%v ssrc=%v ", track.StreamID(), track.Kind(), track.SSRC())
+		log.Infof("[S=>C] got track streamId=%v kind=%v ssrc=%v ", track.StreamID(), track.Kind(), track.SSRC())
 
 		// user define
 		if r.OnTrack != nil {
@@ -197,7 +197,7 @@ func (r *RTC) Join(sid, uid string, config ...*JoinConfig) error {
 	})
 
 	r.sub.pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		log.Debugf("id=%v [r.sub.pc.OnDataChannel] got dc %v", r.uid, dc.Label())
+		log.Debugf("[S=>C] id=%v [r.sub.pc.OnDataChannel] got dc %v", r.uid, dc.Label())
 		if dc.Label() == API_CHANNEL {
 			log.Debugf("%v got dc %v", r.uid, dc.Label())
 			r.sub.api = dc
@@ -307,7 +307,7 @@ func (r *RTC) CreateDataChannel(label string) (*webrtc.DataChannel, error) {
 
 // trickle receive candidate from sfu and add to pc
 func (r *RTC) trickle(candidate webrtc.ICECandidateInit, target Target) {
-	log.Debugf("id=%v candidate=%v target=%v", r.uid, candidate, target)
+	log.Debugf("[S=>C] id=%v candidate=%v target=%v", r.uid, candidate, target)
 	var t *Transport
 	if target == Target_SUBSCRIBER {
 		t = r.sub
@@ -328,7 +328,7 @@ func (r *RTC) trickle(candidate webrtc.ICECandidateInit, target Target) {
 
 // negotiate sub negotiate
 func (r *RTC) negotiate(sdp webrtc.SessionDescription) error {
-	log.Debugf("id=%v Negotiate sdp=%v", r.uid, sdp)
+	log.Debugf("[S=>C] id=%v Negotiate sdp=%v", r.uid, sdp)
 	// 1.sub set remote sdp
 	err := r.sub.pc.SetRemoteDescription(sdp)
 	if err != nil {
@@ -339,7 +339,7 @@ func (r *RTC) negotiate(sdp webrtc.SessionDescription) error {
 	// 2. safe to send candiate to sfu after join ok
 	if len(r.sub.SendCandidates) > 0 {
 		for _, cand := range r.sub.SendCandidates {
-			log.Debugf("id=%v send sub.SendCandidates r.uid, r.rtc.trickle cand=%v", r.uid, cand)
+			log.Debugf("[C=>S] id=%v send sub.SendCandidates r.uid, r.rtc.trickle cand=%v", r.uid, cand)
 			r.SendTrickle(cand, Target_SUBSCRIBER)
 		}
 		r.sub.SendCandidates = []*webrtc.ICECandidate{}
@@ -348,7 +348,7 @@ func (r *RTC) negotiate(sdp webrtc.SessionDescription) error {
 	// 3. safe to add candidate after SetRemoteDescription
 	if len(r.sub.RecvCandidates) > 0 {
 		for _, candidate := range r.sub.RecvCandidates {
-			log.Debugf("id=%v Negotiate r.sub.pc.AddICECandidate candidate=%v", r.uid, candidate)
+			log.Debugf("id=%v r.sub.pc.AddICECandidate candidate=%v", r.uid, candidate)
 			_ = r.sub.pc.AddICECandidate(candidate)
 		}
 		r.sub.RecvCandidates = []webrtc.ICECandidateInit{}
@@ -417,7 +417,7 @@ func (r *RTC) selectRemote(streamId, video string, audio bool) error {
 	// send cached cmd
 	if len(r.apiQueue) > 0 {
 		for _, cmd := range r.apiQueue {
-			log.Debugf("id=%v r.sub.api.Send cmd=%v", r.uid, cmd)
+			log.Debugf("[C=>S] id=%v r.sub.api.Send cmd=%v", r.uid, cmd)
 			marshalled, err := json.Marshal(cmd)
 			if err != nil {
 				continue
@@ -432,7 +432,7 @@ func (r *RTC) selectRemote(streamId, video string, audio bool) error {
 	}
 
 	// send this cmd
-	log.Debugf("id=%v r.sub.api.Send call=%v", r.uid, call)
+	log.Debugf("[C=>S] id=%v r.sub.api.Send call=%v", r.uid, call)
 	marshalled, err := json.Marshal(call)
 	if err != nil {
 		return err
@@ -628,7 +628,6 @@ func (r *RTC) onSingalHandle() error {
 				return err
 			}
 		case *rtc.Reply_Description:
-			log.Infof("payload.Description==%+v", payload.Description)
 			var sdpType webrtc.SDPType
 			if payload.Description.Type == "offer" {
 				sdpType = webrtc.SDPTypeOffer
@@ -696,7 +695,7 @@ func (r *RTC) onSingalHandle() error {
 }
 
 func (r *RTC) SendJoin(sid string, uid string, offer webrtc.SessionDescription, config map[string]string) error {
-	log.Infof("[%v] sid=%v", r.uid, sid)
+	log.Infof("[C=>S] [%v] sid=%v", r.uid, sid)
 	go r.onSingalHandleOnce()
 	r.Lock()
 	err := r.stream.Send(
@@ -717,13 +716,13 @@ func (r *RTC) SendJoin(sid string, uid string, offer webrtc.SessionDescription, 
 	)
 	r.Unlock()
 	if err != nil {
-		log.Errorf("[%v] err=%v", r.uid, err)
+		log.Errorf("[C=>S] [%v] err=%v", r.uid, err)
 	}
 	return err
 }
 
 func (r *RTC) SendTrickle(candidate *webrtc.ICECandidate, target Target) {
-	log.Debugf("[%v] candidate=%v target=%v", r.uid, candidate, target)
+	log.Debugf("[C=>S] [%v] candidate=%v target=%v", r.uid, candidate, target)
 	bytes, err := json.Marshal(candidate.ToJSON())
 	if err != nil {
 		log.Errorf("error: %v", err)
@@ -748,7 +747,7 @@ func (r *RTC) SendTrickle(candidate *webrtc.ICECandidate, target Target) {
 }
 
 func (r *RTC) SendOffer(sdp webrtc.SessionDescription) error {
-	log.Infof("[%v] sdp=%v", r.uid, sdp)
+	log.Infof("[C=>S] [%v] sdp=%v", r.uid, sdp)
 	go r.onSingalHandleOnce()
 	r.Lock()
 	err := r.stream.Send(
@@ -771,7 +770,7 @@ func (r *RTC) SendOffer(sdp webrtc.SessionDescription) error {
 }
 
 func (r *RTC) SendAnswer(sdp webrtc.SessionDescription) error {
-	log.Infof("[%v] sdp=%v", r.uid, sdp)
+	log.Infof("[C=>S] [%v] sdp=%v", r.uid, sdp)
 	r.Lock()
 	err := r.stream.Send(
 		&rtc.Request{
@@ -807,7 +806,7 @@ func (r *RTC) Subscribe(trackInfos []*Subscription) error {
 		})
 	}
 
-	log.Infof("infos: %v", infos)
+	log.Infof("[C=>S] infos: %v", infos)
 	err := r.stream.Send(
 		&rtc.Request{
 			Payload: &rtc.Request_Subscription{
@@ -822,7 +821,7 @@ func (r *RTC) Subscribe(trackInfos []*Subscription) error {
 
 // SubscribeFromEvent will parse event and subscribe what you want
 func (r *RTC) SubscribeFromEvent(event TrackEvent, audio, video bool, layer string) error {
-	log.Infof("OnTrackEvent===: %+v", event)
+	log.Infof("event=%+v audio=%v layer=%v", event, audio, video, layer)
 	if event.State == TrackEvent_UPDATE {
 		return nil
 	}
