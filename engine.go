@@ -62,9 +62,8 @@ func (e *Engine) DelClient(c *Client) error {
 		return errInvalidSessID
 	}
 	if c, ok := e.clients[c.sid][c.uid]; ok && (c != nil) {
-		c.Close()
+        delete(e.clients[c.sid], c.uid)
 	}
-	delete(e.clients[c.sid], c.uid)
 	e.Unlock()
 	return nil
 }
