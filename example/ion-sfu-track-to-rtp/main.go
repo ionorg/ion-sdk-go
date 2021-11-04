@@ -10,14 +10,13 @@ import (
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/webrtc/v3"
 
-	//"github.com/pion/rtcp"
 	"os/exec"
 
 	"github.com/pion/rtp"
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "main", nil)
 )
 
 type udpConn struct {
@@ -33,7 +32,7 @@ func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 
 	cmd := exec.Command("cat", track_sdp)
 	output, err := cmd.Output()
-	log.Infof("output", track_sdp, output, err)
+	log.Info("output", track_sdp, output, err)
 	// Prepare udp conns
 	// Also update incoming packets with expected PayloadType, the browser may use
 	// a different value. We have to modify so our stream matches what rtp-forwarder.sdp expects
@@ -125,44 +124,22 @@ func main() {
 	// parse flag
 	var session, addr, file string
 	flag.StringVar(&file, "file", "./file.webm", "Path to the file media")
-	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test session", "join session name")
+	flag.StringVar(&addr, "addr", "localhost:5551", "ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
-	}
-
-	config := sdk.Config{
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
-	}
-	// new sdk engine
-	e := sdk.NewEngine(config)
-
-	// create a new client from engine
-	c, err := sdk.NewClient(e, addr, "client id")
-	if err != nil {
-		log.Errorf("err=%v", err)
-		return
-	}
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector)
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
-	c.OnTrack = trackToRTP
+	rtc.OnTrack = trackToRTP
 
-	// client join a session
-	err = c.Join(session, nil)
+	err := rtc.Join(session, sdk.RandomKey(4))
 
 	// publish file to session if needed
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 	}
 	select {}
 }

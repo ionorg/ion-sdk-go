@@ -3,6 +3,7 @@ package engine
 import "errors"
 
 var (
+	errInvalidAddr     = errors.New("invalid addr")
 	errInvalidClientID = errors.New("invalid client id")
 	errInvalidSessID   = errors.New("invalid session id")
 	errInvalidFile     = errors.New("invalid file")

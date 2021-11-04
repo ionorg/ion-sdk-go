@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lucsky/cuid"
 	ilog "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	gst "github.com/pion/ion-sdk-go/pkg/gstreamer-sink"
@@ -16,9 +15,9 @@ import (
 )
 
 var (
-	log  = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-cluster", nil)
-	info = map[string]interface{}{"name": "bizclient"}
-	uid  = cuid.New()
+	log = ilog.NewLogger(ilog.InfoLevel, "")
+	sid = "ion"
+	uid = sdk.RandomKey(6)
 )
 
 func init() {
@@ -28,78 +27,165 @@ func init() {
 }
 
 func main() {
-
 	// parse flag
-	var session, addr string
+	var session, addr, cafile string
+	var ssl bool
 	flag.StringVar(&addr, "addr", "localhost:5551", "ion-cluster grpc addr")
-	flag.StringVar(&session, "session", "test room", "join session name")
+	flag.StringVar(&session, "session", sid, "join session name")
+	flag.BoolVar(&ssl, "ssl", false, "use ssl or not")
+	flag.StringVar(&cafile, "cafile", "", "ssl ca file name")
 	flag.Parse()
 
-	connector := sdk.NewIonConnector(addr, uid, info)
+	connector := sdk.NewConnector(addr)
 
-	connector.OnError = func(err error) {
-		log.Errorf("OnError %v", err)
-	}
+	room := sdk.NewRoom(connector)
 
-	connector.OnJoin = func(success bool, reason string) {
-		log.Infof("OnJoin success = %v, reason = %v", success, reason)
-	}
-
-	connector.OnLeave = func(reason string) {
-		log.Infof("OnLeave reason = %v", reason)
-	}
-
-	connector.OnPeerEvent = func(event sdk.PeerEvent) {
-		log.Infof("OnPeerEvent peer = %v, state = %v", event.Peer, event.State)
-	}
-
-	connector.OnStreamEvent = func(event sdk.StreamEvent) {
-		log.Infof("StreamEvent state = %v, sid = %v, uid = %v, streams = %v",
-			event.State,
-			event.Sid,
-			event.Uid,
-			event.Streams)
-	}
-
-	connector.OnMessage = func(msg sdk.Message) {
-		log.Infof("OnMessage from = %v, to = %v, msg = %v", msg.From, msg.To, msg.Data)
-	}
-
-	// subscribe rtp from sessoin
-	// comment this if you don't need save to file
-	connector.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
-		go func() {
-			ticker := time.NewTicker(time.Second * 3)
-			for range ticker.C {
-				rtcpSendErr := connector.SFU().GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
-				if rtcpSendErr != nil {
-					fmt.Println(rtcpSendErr)
-				}
-			}
-		}()
-
-		codecName := strings.Split(track.Codec().RTPCodecCapability.MimeType, "/")[1]
-		fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
-		pipeline := gst.CreatePipeline(strings.ToLower(codecName))
-		pipeline.Start()
-		defer pipeline.Stop()
-		buf := make([]byte, 1400)
-		for {
-			i, _, readErr := track.Read(buf)
-			if readErr != nil {
-				log.Errorf("%v", readErr)
-				return
-			}
-
-			pipeline.Push(buf[:i])
-		}
-	}
-
-	err := connector.Join(session)
+	// THIS IS ROOM MANAGEMENT API
+	// ==========================
+	// create room
+	err := room.CreateRoom(sdk.RoomInfo{Sid: session})
 	if err != nil {
-		log.Errorf("join err %v", err)
+		log.Errorf("error:%v", err)
+		return
 	}
 
-	gst.StartMainLoop()
+	// add peer to room
+	err = room.AddPeer(sdk.PeerInfo{Sid: session, Uid: uid})
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
+
+	// get peers from room
+	peers := room.GetPeers(session)
+	log.Infof("peers=%+v", peers)
+
+	// update peer in room
+	err = room.UpdatePeer(sdk.PeerInfo{Sid: session, Uid: uid, DisplayName: "name"})
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
+
+	time.Sleep(3 * time.Second)
+
+	// remove peer from room
+	err = room.RemovePeer(session, uid)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
+
+	// lock room
+	err = room.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: true})
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
+
+	// unlock room
+	err = room.UpdateRoom(sdk.RoomInfo{Sid: session, Lock: false})
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
+
+	// end room
+	err = room.EndRoom(session, "conference end", true)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
+	}
+
+	// THIS IS ROOM SINGAL API
+	// ===============================
+	room.OnJoin = func(success bool, info sdk.RoomInfo, err error) {
+		log.Infof("OnJoin success = %v, info = %v, err = %v", success, info, err)
+		rtc := sdk.NewRTC(connector)
+		// subscribe rtp from sessoin
+		// comment this if you don't need save to file
+		rtc.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+			// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
+			go func() {
+				ticker := time.NewTicker(time.Second * 3)
+				for range ticker.C {
+					rtcpSendErr := rtc.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
+					if rtcpSendErr != nil {
+						fmt.Println(rtcpSendErr)
+					}
+				}
+			}()
+
+			codecName := strings.Split(track.Codec().RTPCodecCapability.MimeType, "/")[1]
+			fmt.Printf("Track has started, of type %d: %s \n", track.PayloadType(), codecName)
+			pipeline := gst.CreatePipeline(strings.ToLower(codecName))
+			pipeline.Start()
+			defer pipeline.Stop()
+			buf := make([]byte, 1400)
+			for {
+				i, _, readErr := track.Read(buf)
+				if readErr != nil {
+					log.Errorf("%v", readErr)
+					return
+				}
+
+				pipeline.Push(buf[:i])
+			}
+		}
+
+		rtc.OnDataChannel = func(dc *webrtc.DataChannel) {
+			log.Infof("dc: %v", dc.Label())
+		}
+
+		rtc.OnError = func(err error) {
+			log.Errorf("err: %v", err)
+		}
+
+		err = rtc.Join(info.Sid, sdk.RandomKey(4))
+		if err != nil {
+			log.Errorf("error: %v", err)
+			return
+		}
+		log.Infof("rtc.Join ok sid=%v", info.Sid)
+	}
+
+	room.OnLeave = func(success bool, err error) {
+		log.Infof("OnLeave success = %v err = %v", success, err)
+	}
+
+	room.OnPeerEvent = func(state sdk.PeerState, peer sdk.PeerInfo) {
+		log.Infof("OnPeerEvent state = %v, peer = %v", state, peer)
+	}
+
+	room.OnMessage = func(from string, to string, data map[string]interface{}) {
+		log.Infof("OnMessage from = %v, to = %v, data = %v", from, to, data)
+	}
+
+	room.OnDisconnect = func(sid, reason string) {
+		log.Infof("OnDisconnect sid = %v, reason = %v", sid, reason)
+	}
+
+	room.OnRoomInfo = func(info sdk.RoomInfo) {
+		log.Infof("OnRoomInfo info=%v", info)
+	}
+
+	// join room
+	err = room.Join(
+		sdk.JoinInfo{
+			Sid:         sid,
+			Uid:         uid,
+			DisplayName: uid,
+			Role:        sdk.Role_Host,
+			Protocol:    sdk.Protocol_WebRTC,
+			Direction:   sdk.Peer_BILATERAL,
+		},
+	)
+
+	if err != nil {
+		log.Errorf("Join error: %v", err)
+		return
+	}
+
+	go gst.StartMainLoop()
+	select {}
 }

@@ -19,5 +19,5 @@ go get github.com/pion/ion-sdk-go/example/ion-sfu-gstreamer-receive
 
 ### Run ion-sfu-gstreamer-receive
 ```
-ion-sfu-gstreamer-receive -addr "127.0.0.1:50051" -session "test room"
+ion-sfu-gstreamer-receive -addr "127.0.0.1:5551" -session "ion"
 ```

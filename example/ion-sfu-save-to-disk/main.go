@@ -3,6 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"strings"
+	"time"
+
 	log "github.com/pion/ion-log"
 	sdk "github.com/pion/ion-sdk-go"
 	"github.com/pion/rtcp"
@@ -10,8 +13,6 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media/ivfwriter"
 	"github.com/pion/webrtc/v3/pkg/media/oggwriter"
-	"strings"
-	"time"
 )
 
 const (
@@ -22,40 +23,20 @@ const (
 func main() {
 	// parse flag
 	var session, addr string
-	flag.StringVar(&addr, "addr", "localhost:50051", "ion-cluster grpc addr")
-	flag.StringVar(&session, "session", "test room", "join session name")
+	flag.StringVar(&addr, "addr", "localhost:5551", "ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
-	}
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector)
 
-	config := sdk.Config{
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
-	}
-	// new sdk engine
-	engine := sdk.NewEngine(config)
-
-	// create a new client from engine
-	c, err := sdk.NewClient(engine, addr, "")
-	if err != nil {
-		log.Errorf("sdk.NewClient: err=%v", err)
-		return
-	}
-
-	c.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+	rtc.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		fmt.Println("Got track")
 		// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
 		go func() {
 			ticker := time.NewTicker(time.Second * 3)
 			for range ticker.C {
-				rtcpSendErr := c.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
+				rtcpSendErr := rtc.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
 				if rtcpSendErr != nil {
 					fmt.Println(rtcpSendErr)
 				}
@@ -112,11 +93,11 @@ func main() {
 	}
 
 	// client join a session
-	err = c.Join(session, nil)
+	err := rtc.Join(session, sdk.RandomKey(4))
 
 	// publish file to session if needed
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 	}
 
 	select {}

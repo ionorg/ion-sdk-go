@@ -9,7 +9,7 @@ This example will take an audio and video track and save it into a local webm fi
 2. Run the script
 
 ```
-go run main.go -addr "localhost:50051" -session "test session"
+go run main.go -addr "localhost:5551" -session "ion"
 ```
 
 3. Your video or audio track will be saved and can be accessed after quitting the application with `Control + C`

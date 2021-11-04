@@ -26,7 +26,7 @@ func saveToDisk(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	}
 
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		fileWriter.Close()
 		return
 	}
@@ -34,66 +34,53 @@ func saveToDisk(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	for {
 		rtpPacket, _, err := track.ReadRTP()
 		if err != nil {
-			panic(err)
+			log.Warnf("track.ReadRTP error: %v", err)
+			break
 		}
 		if err := fileWriter.WriteRTP(rtpPacket); err != nil {
-			panic(err)
+			log.Warnf("fileWriter.WriteRTP error: %v", err)
+			break
 		}
 	}
 }
 
 func main() {
-	// init log
-	log.Init("debug")
 
 	// parse flag
-	var session, addr, file string
+	var session, addr, file, logLevel string
 	flag.StringVar(&file, "file", "", "Path to the file media")
-	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test session", "join session name")
+	flag.StringVar(&addr, "addr", "localhost:5551", "Ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
+	flag.StringVar(&logLevel, "log", "info", "log level")
 	flag.Parse()
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
+	log.Init(logLevel)
+
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector)
+
+	// user define receiving rtp
+	rtc.OnTrack = saveToDisk
+
+	rtc.OnDataChannel = func(dc *webrtc.DataChannel) {
+		log.Infof("dc: %v", dc.Label())
 	}
 
-	config := sdk.Config{
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
+	rtc.OnError = func(err error) {
+		log.Errorf("err: %v", err)
 	}
-	// new sdk engine
-	e := sdk.NewEngine(config)
 
-	// create a new client from engine
-	c, err := sdk.NewClient(e, addr, "client id")
+	err := rtc.Join(session, sdk.RandomKey(4))
 	if err != nil {
-		log.Errorf("err=%v", err)
-		return
-	}
-	// subscribe rtp from sessoin
-	// comment this if you don't need save to file
-	c.OnTrack = saveToDisk
-
-	// client join a session
-	err = c.Join(session, nil)
-	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 		return
 	}
 
 	// publish file to session if needed
-	if file != "" {
-		err = c.PublishWebm(file, true, true)
-		if err != nil {
-			log.Errorf("err=%v", err)
-			return
-		}
+	err = rtc.PublishFile(file, true, true)
+	if err != nil {
+		log.Errorf("error: %v", err)
+		return
 	}
 
 	select {}

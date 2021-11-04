@@ -1,1 +1,4 @@
-This show how to join 'test room' room and publish your camera
+This example show:
+
+* how to join 'ion' room
+* receive stream from publisher and publish it back

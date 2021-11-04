@@ -9,7 +9,7 @@ This example will take an audio and video track and save it into a local file.
 2. Run the RTP forwarder
 
 ```
-go run main.go -addr "localhost:50051" -session "test session"
+go run main.go -addr "localhost:5551" -session "ion"
 ```
 
 3. The contents of your video or audio stream will be written into the output file. You can also convert the file to another format using FFMPEG.

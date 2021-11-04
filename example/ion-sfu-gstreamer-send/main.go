@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+
 	gst "github.com/pion/ion-sdk-go/pkg/gstreamer-src"
 
 	ilog "github.com/pion/ion-log"
@@ -10,60 +11,30 @@ import (
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
+	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "ion-sfu-gstreamer-send", nil)
 )
 
 func main() {
 	// parse flag
-	var session, addr string
-	flag.StringVar(&addr, "addr", "localhost:50051", "Ion-sfu grpc addr")
-	flag.StringVar(&session, "session", "test room", "join session name")
+	var session, addr, logLevel string
+	flag.StringVar(&addr, "addr", "localhost:5551", "ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
+	flag.StringVar(&logLevel, "log", "info", "log level:debug|info|warn|error")
 	audioSrc := flag.String("audio-src", "audiotestsrc", "GStreamer audio src")
 	videoSrc := flag.String("video-src", "videotestsrc", "GStreamer video src")
 	flag.Parse()
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
-	}
-
-	config := sdk.Config{
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
-	}
 	// new sdk engine
-	e := sdk.NewEngine(config)
-
-	// get a client from engine
-	c, err := sdk.NewClient(e, addr, "client id")
-
-	var peerConnection *webrtc.PeerConnection = c.GetPubTransport().GetPeerConnection()
-
-	peerConnection.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
-		log.Infof("Connection state changed: %s", state)
-	})
-
-	if err != nil {
-		log.Errorf("client err=%v", err)
-		panic(err)
+	config := sdk.RTCConfig{
+		WebRTC: sdk.WebRTCTransportConfig{
+			VideoMime: sdk.MimeTypeVP8,
+		},
 	}
 
-	err = e.AddClient(c)
-	if err != nil {
-		return
-	}
+	connector := sdk.NewConnector(addr)
+	rtc := sdk.NewRTC(connector, config)
 
 	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: "video/vp8"}, "video", "pion2")
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = peerConnection.AddTrack(videoTrack)
 	if err != nil {
 		panic(err)
 	}
@@ -72,18 +43,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	_, err = peerConnection.AddTrack(audioTrack)
-	if err != nil {
-		panic(err)
-	}
-
 	// client join a session
-	err = c.Join(session, nil)
+	err = rtc.Join(session, sdk.RandomKey(4))
 
 	if err != nil {
 		log.Errorf("join err=%v", err)
 		panic(err)
 	}
+	_, _ = rtc.Publish(videoTrack, audioTrack)
 
 	// Start pushing buffers on these tracks
 	gst.CreatePipeline("opus", []*webrtc.TrackLocalStaticSample{audioTrack}, *audioSrc).Start()

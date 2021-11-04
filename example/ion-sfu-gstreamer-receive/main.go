@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	log = ilog.NewLoggerWithFields(ilog.DebugLevel, "", nil)
+	log = ilog.NewLogger(ilog.DebugLevel, "")
 )
 
 func init() {
@@ -26,41 +26,19 @@ func init() {
 
 func runClientLoop(addr, session string) {
 
-	// add stun servers
-	webrtcCfg := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{
-			webrtc.ICEServer{
-				URLs: []string{"stun:stun.stunprotocol.org:3478", "stun:stun.l.google.com:19302"},
-			},
-		},
-	}
-
-	config := sdk.Config{
-		Log: log.Config{
-			Level: "debug",
-		},
-		WebRTC: sdk.WebRTCTransportConfig{
-			Configuration: webrtcCfg,
-		},
-	}
 	// new sdk engine
-	engine := sdk.NewEngine(config)
+	connector := sdk.NewConnector(addr)
 
-	// create a new client from engine
-	c, err := sdk.NewClient(engine, addr, "")
-	if err != nil {
-		log.Errorf("sdk.NewClient: err=%v", err)
-		return
-	}
+	rtc := sdk.NewRTC(connector)
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
-	c.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
+	rtc.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		// Send a PLI on an interval so that the publisher is pushing a keyframe every rtcpPLIInterval
 		go func() {
 			ticker := time.NewTicker(time.Second * 3)
 			for range ticker.C {
-				rtcpSendErr := c.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
+				rtcpSendErr := rtc.GetSubTransport().GetPeerConnection().WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}})
 				if rtcpSendErr != nil {
 					fmt.Println(rtcpSendErr)
 				}
@@ -92,11 +70,11 @@ func runClientLoop(addr, session string) {
 	}
 
 	// client join a session
-	err = c.Join(session, nil)
+	err := rtc.Join(session, sdk.RandomKey(4))
 
 	// publish file to session if needed
 	if err != nil {
-		log.Errorf("err=%v", err)
+		log.Errorf("error: %v", err)
 	}
 
 	select {}
@@ -105,8 +83,8 @@ func runClientLoop(addr, session string) {
 func main() {
 	// parse flag
 	var session, addr string
-	flag.StringVar(&addr, "addr", "localhost:50051", "ion-cluster grpc addr")
-	flag.StringVar(&session, "session", "test room", "join session name")
+	flag.StringVar(&addr, "addr", "localhost:5551", "ion-sfu grpc addr")
+	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
 	go runClientLoop(addr, session)

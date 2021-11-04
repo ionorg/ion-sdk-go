@@ -8,40 +8,46 @@ import (
 // Transport is pub/sub transport
 type Transport struct {
 	api            *webrtc.DataChannel
-	signal         *Signal
+	rtc            *RTC
 	pc             *webrtc.PeerConnection
-	role           int
-	config         WebRTCTransportConfig
+	role           Target
 	SendCandidates []*webrtc.ICECandidate
 	RecvCandidates []webrtc.ICECandidateInit
 }
 
 // NewTransport create a transport
-func NewTransport(role int, signal *Signal, cfg WebRTCTransportConfig) *Transport {
+func NewTransport(role Target, rtc *RTC) *Transport {
 	t := &Transport{
-		role:   role,
-		signal: signal,
-		config: cfg,
+		role: role,
+		rtc:  rtc,
 	}
-
+	if rtc.config == nil {
+		rtc.config = &DefaultConfig
+	}
 	var err error
 	var api *webrtc.API
 	var me *webrtc.MediaEngine
-	cfg.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
-	if role == PUBLISHER {
-		me, err = getPublisherMediaEngine(cfg.VideoMime)
+	rtc.config.WebRTC.Setting.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
+	if role == Target_PUBLISHER {
+		me, err = getPublisherMediaEngine(rtc.config.WebRTC.VideoMime)
 	} else {
 		me, err = getSubscriberMediaEngine()
 	}
-	api = webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(cfg.Setting))
-	t.pc, err = api.NewPeerConnection(cfg.Configuration)
+
+	if err != nil {
+		log.Errorf("getPublisherMediaEngine error: %v", err)
+		return nil
+	}
+
+	api = webrtc.NewAPI(webrtc.WithMediaEngine(me), webrtc.WithSettingEngine(rtc.config.WebRTC.Setting))
+	t.pc, err = api.NewPeerConnection(rtc.config.WebRTC.Configuration)
 
 	if err != nil {
 		log.Errorf("NewPeerConnection error: %v", err)
 		return nil
 	}
 
-	if role == PUBLISHER {
+	if role == Target_PUBLISHER {
 		_, err = t.pc.CreateDataChannel(API_CHANNEL, &webrtc.DataChannelInit{})
 
 		if err != nil {
@@ -61,10 +67,10 @@ func NewTransport(role int, signal *Signal, cfg WebRTCTransportConfig) *Transpor
 			t.SendCandidates = append(t.SendCandidates, c)
 		} else {
 			for _, cand := range t.SendCandidates {
-				t.signal.Trickle(cand, role)
+				t.rtc.SendTrickle(cand, role)
 			}
 			t.SendCandidates = []*webrtc.ICECandidate{}
-			t.signal.Trickle(c, role)
+			t.rtc.SendTrickle(c, role)
 		}
 	})
 	return t
