@@ -26,19 +26,19 @@ type Pipeline struct {
 }
 
 // CreatePipeline creates a GStreamer Pipeline
-func CreatePipeline(codecName string) *Pipeline {
+func CreatePipeline(codecName, pipelineSink string) *Pipeline {
 	pipelineStr := "appsrc format=time is-live=true do-timestamp=true name=src ! application/x-rtp"
 	switch codecName {
 	case "vp8":
-		pipelineStr += ", encoding-name=VP8-DRAFT-IETF-01 ! rtpvp8depay ! decodebin ! autovideosink"
+		pipelineStr += ", encoding-name=VP8-DRAFT-IETF-01 ! rtpvp8depay ! decodebin ! " + pipelineSink
 	case "opus":
-		pipelineStr += ", payload=96, encoding-name=OPUS ! rtpopusdepay ! decodebin ! autoaudiosink"
+		pipelineStr += ", payload=96, encoding-name=OPUS ! rtpopusdepay ! decodebin ! " + pipelineSink
 	case "vp9":
-		pipelineStr += " ! rtpvp9depay ! decodebin ! autovideosink"
+		pipelineStr += " ! rtpvp9depay ! decodebin ! " + pipelineSink
 	case "h264":
-		pipelineStr += " ! rtph264depay ! decodebin ! autovideosink"
+		pipelineStr += " ! rtph264depay ! decodebin ! " + pipelineSink
 	case "g722":
-		pipelineStr += " clock-rate=8000 ! rtpg722depay ! decodebin ! autoaudiosink"
+		pipelineStr += " clock-rate=8000 ! rtpg722depay ! decodebin ! " + pipelineSink
 	default:
 		panic("Unhandled codec " + codecName)
 	}
