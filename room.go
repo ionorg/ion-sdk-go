@@ -8,6 +8,7 @@ import (
 	"io"
 	"sync"
 
+	log "github.com/pion/ion-log"
 	room "github.com/pion/ion/apps/room/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -123,7 +124,7 @@ func NewRoom(connector *Connector) *Room {
 // Params: sid password, at lease a sid
 func (r *Room) CreateRoom(info RoomInfo) error {
 	if info.Sid == "" {
-		return ErrorInvalidParams
+		return errInvalidParams
 	}
 
 	roomInfo := &room.Room{
@@ -146,7 +147,7 @@ func (r *Room) CreateRoom(info RoomInfo) error {
 		return err
 	}
 	if reply == nil {
-		return ErrorReplyNil
+		return errReplyNil
 	}
 	if reply.Success {
 		return nil
@@ -156,7 +157,7 @@ func (r *Room) CreateRoom(info RoomInfo) error {
 
 func (r *Room) EndRoom(sid, reason string, delete bool) error {
 	if sid == "" {
-		return ErrorInvalidParams
+		return errInvalidParams
 	}
 
 	log.Infof("sid=%v reason=%v delete=%v", sid, reason, delete)
@@ -173,7 +174,7 @@ func (r *Room) EndRoom(sid, reason string, delete bool) error {
 		return err
 	}
 	if reply == nil {
-		return ErrorReplyNil
+		return errReplyNil
 	}
 	if reply.Success {
 		log.Infof("reply success")
@@ -214,7 +215,7 @@ func (r *Room) AddPeer(peer PeerInfo) error {
 		return err
 	}
 	if reply == nil {
-		return ErrorReplyNil
+		return errReplyNil
 	}
 	if reply.Success {
 		log.Infof("reply success")
@@ -238,7 +239,7 @@ func (r *Room) RemovePeer(sid, uid string) error {
 		return err
 	}
 	if reply == nil {
-		return ErrorReplyNil
+		return errReplyNil
 	}
 	if reply.Success {
 		return nil
@@ -249,7 +250,7 @@ func (r *Room) RemovePeer(sid, uid string) error {
 func (r *Room) UpdatePeer(peer PeerInfo) error {
 	// at least sid uid
 	if peer.Sid == "" || peer.Uid == "" {
-		return ErrorInvalidParams
+		return errInvalidParams
 	}
 
 	info := &room.Peer{
@@ -273,7 +274,7 @@ func (r *Room) UpdatePeer(peer PeerInfo) error {
 		return err
 	}
 	if reply == nil {
-		return ErrorReplyNil
+		return errReplyNil
 	}
 	if reply.Success {
 		return nil
@@ -340,7 +341,7 @@ func (r *Room) UpdateRoom(info RoomInfo) error {
 		return err
 	}
 	if reply == nil {
-		return ErrorReplyNil
+		return errReplyNil
 	}
 	if reply.Success {
 		return nil
@@ -359,8 +360,8 @@ func (c *Room) Join(j JoinInfo) error {
 
 	if j.Sid == "" {
 		log.Errorf("invalid sid [%v]", j.Sid)
-		c.OnError(ErrorInvalidParams)
-		return ErrorInvalidParams
+		c.OnError(errInvalidParams)
+		return errInvalidParams
 	}
 	if j.Uid == "" {
 		j.Uid = RandomKey(6)

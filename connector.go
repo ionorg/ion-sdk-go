@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 
+	log "github.com/pion/ion-log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -57,7 +58,7 @@ func NewConnector(addr string, config ...ConnectorConfig) *Connector {
 	}
 
 	if addr == "" {
-		log.Error(errInvalidAddr)
+		log.Errorf("error: %v", errInvalidAddr)
 		return nil
 	}
 
@@ -72,7 +73,7 @@ func NewConnector(addr string, config ...ConnectorConfig) *Connector {
 			b, _ := ioutil.ReadFile(c.config.Cafile)
 			cp := x509.NewCertPool()
 			if !cp.AppendCertsFromPEM(b) {
-				log.Error("credentials: failed to append certificates")
+				log.Errorf("credentials: failed to append certificates")
 				return nil
 			}
 

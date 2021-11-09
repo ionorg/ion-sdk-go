@@ -9,4 +9,6 @@ var (
 	errInvalidFile     = errors.New("invalid file")
 	errInvalidPC       = errors.New("invalid pc")
 	errInvalidKind     = errors.New("invalid kind, shoud be audio or video")
+	errInvalidParams   = errors.New("invalid params")
+	errReplyNil        = errors.New("reply is nil")
 )

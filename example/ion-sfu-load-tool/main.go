@@ -240,7 +240,6 @@ func main() {
 	default:
 		log.SetLevel(logrus.DebugLevel)
 	}
-	sdk.InitLog("debug")
 
 	e := NewEngine(gaddr)
 	if paddr != "" {
