@@ -822,7 +822,7 @@ func (r *RTC) Subscribe(trackInfos []*Subscription) error {
 
 // SubscribeFromEvent will parse event and subscribe what you want
 func (r *RTC) SubscribeFromEvent(event TrackEvent, audio, video bool, layer string) error {
-	log.Infof("event=%+v audio=%v layer=%v", event, audio, video, layer)
+	log.Infof("event=%+v audio=%v video=%v layer=%v", event, audio, video, layer)
 	if event.State == TrackEvent_UPDATE {
 		return nil
 	}
