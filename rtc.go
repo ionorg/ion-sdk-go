@@ -99,6 +99,7 @@ var (
 
 // WebRTCTransportConfig represents configuration options
 type WebRTCTransportConfig struct {
+	// if set, only this codec will be registered. leave unset to register all codecs.
 	VideoMime     string
 	Configuration webrtc.Configuration
 	Setting       webrtc.SettingEngine
