@@ -1,5 +1,8 @@
 # ion-sdk-go
 this is ion golang sdk for ion-sfu
+Dependence:
+- [x] Gstreamer 2.70.x (for example which use Gstreamer)
+
 Feature:
 - [x] Join a session
   - [x] Join with config(NoPublish/NoSubscribe/Relay)
@@ -25,4 +28,4 @@ Feature:
   - [x] camera
   - [x] mic
   - [ ] screen
-- [ ] Support ion cluster
+- [x] Support ion cluster
