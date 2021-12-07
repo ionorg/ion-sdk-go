@@ -278,28 +278,32 @@ func (r *RTC) GetSubTransport() *Transport {
 }
 
 // Publish local tracks
-func (r *RTC) Publish(tracks ...webrtc.TrackLocal) ([]*webrtc.RTPTransceiver, error) {
-	var transceivers []*webrtc.RTPTransceiver
+func (r *RTC) Publish(tracks ...webrtc.TrackLocal) ([]*webrtc.RTPSender, error) {
+	var rtpSenders []*webrtc.RTPSender
 	for _, t := range tracks {
-		if _, err := r.pub.GetPeerConnection().AddTrack(t); err != nil {
+		if rtpSender, err := r.pub.GetPeerConnection().AddTrack(t); err != nil {
 			log.Errorf("AddTrack error: %v", err)
-			return transceivers, err
+			return rtpSenders, err
+		}else{
+			rtpSenders=append(rtpSenders,rtpSender)
 		}
+
 	}
 	r.onNegotiationNeeded()
-	return transceivers, nil
+	return rtpSenders, nil
 }
 
 // UnPublish local tracks by transceivers
-func (r *RTC) UnPublish(transceivers ...*webrtc.RTPTransceiver) error {
-	for _, t := range transceivers {
-		if err := r.pub.pc.RemoveTrack(t.Sender()); err != nil {
+func (r *RTC) UnPublish(senders ...*webrtc.RTPSender) error {
+	for _, s := range senders {
+		if err := r.pub.pc.RemoveTrack(s); err != nil {
 			return err
 		}
 	}
 	r.onNegotiationNeeded()
 	return nil
 }
+
 
 // CreateDataChannel create a custom datachannel
 func (r *RTC) CreateDataChannel(label string) (*webrtc.DataChannel, error) {
