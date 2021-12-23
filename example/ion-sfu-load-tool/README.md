@@ -40,7 +40,7 @@ sysctl -w net.ipv4.tcp_max_syn_backlog=65535
 sysctl -w net.ipv4.tcp_syncookies=1
 
 #your command line here, make sure run it with sudo!
-./allrpc -c config.toml -gaddr "0.0.0.0:8000" -jaddr "0.0.0.0:7000" -maddr "0.0.0.0:9000" -paddr "0.0.0.0:6060"
+./allrpc -jaddr ":7000" -gaddr ":5551" -c config.toml
 ```
 
 ### Command Line
@@ -64,17 +64,16 @@ sysctl -w net.ipv4.tcp_syncookies=1
 #your command line here, make sure run it with sudo!
 # conference mode: 10v10
 # you only need one script
-./ion-sfu-load-tool -file ./djrm480p.webm -clients 10 -role pubsub -gaddr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
+./ion-sfu-load-tool -file ./djrm480p.webm -clients 10 -role pubsub -gaddr "yoursfuip:5551" -session 'ion' -log debug -cycle 1000 -a -v
 
 
 
 # live mode: 1v10
 # you need to run two scripts
 # pub.sh
-#./ion-sfu-load-tool -file ./djrm480p.webm -clients 1 -role pubsub -gaddr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
+#./ion-sfu-load-tool -file ./djrm480p.webm -clients 1 -role pubsub -gaddr "yoursfuip:5551" -session 'ion' -log debug -cycle 1000 -a -v
 
 # sub.sh
-#./ion-sfu-load-tool -file ./djrm480p.webm -clients 10 -role sub -gaddr "yoursfuip:8000" -session 'test' -log debug -cycle 1000
+#../ion-sfu-load-tool -file /Volumes/vm/media/djrm480p.webm  -clients 10 -role sub -gaddr "127.0.0.1:5551" -session 'ion'
 ```
-
 
