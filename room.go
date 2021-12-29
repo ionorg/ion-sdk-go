@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/metadata"
 	"io"
 	"sync"
 
@@ -572,6 +573,7 @@ func (c *Room) Name() string {
 func (c *Room) Connect() {
 	var err error
 	c.ctx, c.cancel = context.WithCancel(context.Background())
+	c.ctx = metadata.NewOutgoingContext(c.ctx, c.connector.Metadata)
 	c.roomServiceClient = room.NewRoomServiceClient(c.connector.grpcConn)
 	c.roomSignalClient = room.NewRoomSignalClient(c.connector.grpcConn)
 	c.roomSignalStream, err = c.roomSignalClient.Signal(c.ctx)
