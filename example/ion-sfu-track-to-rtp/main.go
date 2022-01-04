@@ -26,7 +26,7 @@ type udpConn struct {
 }
 
 func trackToRTP(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-	log.Infof("GOT TRACK", track, receiver)
+	log.Infof("GOT TRACK, track: %v, receiver: %v", track, receiver)
 
 	track_sdp := "track-" + track.ID() + ".sdp"
 
@@ -128,14 +128,19 @@ func main() {
 	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
+	rtc := sdk.NewRTC()
 	connector := sdk.NewConnector(addr)
-	rtc := sdk.NewRTC(connector)
+	signaller, err := connector.Signal(rtc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rtc.Start(signaller)
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
 	rtc.OnTrack = trackToRTP
 
-	err := rtc.Join(session, sdk.RandomKey(4))
+	err = rtc.Join(session, sdk.RandomKey(4))
 
 	// publish file to session if needed
 	if err != nil {

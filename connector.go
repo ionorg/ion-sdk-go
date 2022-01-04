@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"github.com/pion/ion/proto/rtc"
 	"io/ioutil"
 
 	log "github.com/pion/ion-log"
@@ -104,6 +105,12 @@ func NewConnector(addr string, config ...ConnectorConfig) *Connector {
 	log.Infof("gRPC connected: %s", addr)
 
 	return c
+}
+
+func (c *Connector) Signal(r *RTC) (Signaller, error) {
+	c.RegisterService(r)
+	client := rtc.NewRTCClient(c.grpcConn)
+	return client.Signal(r.ctx)
 }
 
 func (c *Connector) Close() {

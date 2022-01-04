@@ -109,11 +109,16 @@ type RTCConfig struct {
 	WebRTC WebRTCTransportConfig `mapstructure:"webrtc"`
 }
 
+type Signaller interface {
+	Send(request *rtc.Request) error
+	Recv() (*rtc.Reply, error)
+	CloseSend() error
+}
+
 // Client a sdk client
 type RTC struct {
 	Service
 	connected bool
-	connector *Connector
 
 	config *RTCConfig
 
@@ -135,8 +140,7 @@ type RTC struct {
 	//cache datachannel api operation before dr.OnOpen
 	apiQueue []Call
 
-	client rtc.RTCClient
-	stream rtc.RTC_SignalClient
+	signaller Signaller
 
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -144,22 +148,26 @@ type RTC struct {
 	sync.Mutex
 }
 
-func NewRTC(connector *Connector, config ...RTCConfig) *RTC {
-	r := &RTC{
-		connector: connector,
-	}
+func NewRTC(config ...RTCConfig) *RTC {
+
+	r := &RTC{}
+	r.ctx, r.cancel = context.WithCancel(context.Background())
 
 	if len(config) > 0 {
 		r.config = &config[0]
 	}
 
-	r.connector.RegisterService(r)
+	return r
+}
+
+func (r *RTC) Start(signaller Signaller) {
+	r.signaller = signaller
+
 	if !r.Connected() {
 		r.Connect()
 	}
 	r.pub = NewTransport(Target_PUBLISHER, r)
 	r.sub = NewTransport(Target_PUBLISHER, r)
-	return r
 }
 
 // Join client join a session
@@ -284,8 +292,8 @@ func (r *RTC) Publish(tracks ...webrtc.TrackLocal) ([]*webrtc.RTPSender, error) 
 		if rtpSender, err := r.pub.GetPeerConnection().AddTrack(t); err != nil {
 			log.Errorf("AddTrack error: %v", err)
 			return rtpSenders, err
-		}else{
-			rtpSenders=append(rtpSenders,rtpSender)
+		} else {
+			rtpSenders = append(rtpSenders, rtpSender)
 		}
 
 	}
@@ -303,7 +311,6 @@ func (r *RTC) UnPublish(senders ...*webrtc.RTPSender) error {
 	r.onNegotiationNeeded()
 	return nil
 }
-
 
 // CreateDataChannel create a custom datachannel
 func (r *RTC) CreateDataChannel(label string) (*webrtc.DataChannel, error) {
@@ -556,16 +563,6 @@ func (r *RTC) Name() string {
 }
 
 func (r *RTC) Connect() {
-	var err error
-
-	r.ctx, r.cancel = context.WithCancel(context.Background())
-	r.client = rtc.NewRTCClient(r.connector.grpcConn)
-	r.stream, err = r.client.Signal(r.ctx)
-
-	if err != nil {
-		log.Errorf("error: %v", err)
-		return
-	}
 	go r.onSingalHandleOnce()
 	r.connected = true
 }
@@ -588,11 +585,11 @@ func (r *RTC) onSingalHandleOnce() {
 func (r *RTC) onSingalHandle() error {
 	for {
 		//only one goroutine for recving from stream, no need to lock
-		stream, err := r.stream.Recv()
+		stream, err := r.signaller.Recv()
 		if err != nil {
 			if err == io.EOF {
 				log.Infof("[%v] WebRTC Transport Closed", r.uid)
-				if err := r.stream.CloseSend(); err != nil {
+				if err := r.signaller.CloseSend(); err != nil {
 					log.Errorf("[%v] error sending close: %s", r.uid, err)
 				}
 				return err
@@ -600,7 +597,7 @@ func (r *RTC) onSingalHandle() error {
 
 			errStatus, _ := status.FromError(err)
 			if errStatus.Code() == codes.Canceled {
-				if err := r.stream.CloseSend(); err != nil {
+				if err := r.signaller.CloseSend(); err != nil {
 					log.Errorf("[%v] error sending close: %s", r.uid, err)
 				}
 				return err
@@ -694,8 +691,10 @@ func (r *RTC) onSingalHandle() error {
 			if !payload.Subscription.Success {
 				log.Errorf("suscription error: %v", payload.Subscription.Error)
 			}
+		case *rtc.Reply_Error:
+			log.Errorf("Request error: %v", payload.Error)
 		default:
-			log.Errorf("Unknow RTC type!!!!%v", payload)
+			log.Errorf("Unknown RTC type!!!!%v", payload)
 		}
 	}
 }
@@ -704,7 +703,7 @@ func (r *RTC) SendJoin(sid string, uid string, offer webrtc.SessionDescription, 
 	log.Infof("[C=>S] [%v] sid=%v", r.uid, sid)
 	go r.onSingalHandleOnce()
 	r.Lock()
-	err := r.stream.Send(
+	err := r.signaller.Send(
 		&rtc.Request{
 			Payload: &rtc.Request_Join{
 				Join: &rtc.JoinRequest{
@@ -736,7 +735,7 @@ func (r *RTC) SendTrickle(candidate *webrtc.ICECandidate, target Target) {
 	}
 	go r.onSingalHandleOnce()
 	r.Lock()
-	err = r.stream.Send(
+	err = r.signaller.Send(
 		&rtc.Request{
 			Payload: &rtc.Request_Trickle{
 				Trickle: &rtc.Trickle{
@@ -756,7 +755,7 @@ func (r *RTC) SendOffer(sdp webrtc.SessionDescription) error {
 	log.Infof("[C=>S] [%v] sdp=%v", r.uid, sdp)
 	go r.onSingalHandleOnce()
 	r.Lock()
-	err := r.stream.Send(
+	err := r.signaller.Send(
 		&rtc.Request{
 			Payload: &rtc.Request_Description{
 				Description: &rtc.SessionDescription{
@@ -778,7 +777,7 @@ func (r *RTC) SendOffer(sdp webrtc.SessionDescription) error {
 func (r *RTC) SendAnswer(sdp webrtc.SessionDescription) error {
 	log.Infof("[C=>S] [%v] sdp=%v", r.uid, sdp)
 	r.Lock()
-	err := r.stream.Send(
+	err := r.signaller.Send(
 		&rtc.Request{
 			Payload: &rtc.Request_Description{
 				Description: &rtc.SessionDescription{
@@ -813,7 +812,7 @@ func (r *RTC) Subscribe(trackInfos []*Subscription) error {
 	}
 
 	log.Infof("[C=>S] infos: %v", infos)
-	err := r.stream.Send(
+	err := r.signaller.Send(
 		&rtc.Request{
 			Payload: &rtc.Request_Subscription{
 				Subscription: &rtc.SubscriptionRequest{
