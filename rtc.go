@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"google.golang.org/grpc/metadata"
 	"io"
 	"os"
 	"path/filepath"
@@ -284,8 +285,8 @@ func (r *RTC) Publish(tracks ...webrtc.TrackLocal) ([]*webrtc.RTPSender, error) 
 		if rtpSender, err := r.pub.GetPeerConnection().AddTrack(t); err != nil {
 			log.Errorf("AddTrack error: %v", err)
 			return rtpSenders, err
-		}else{
-			rtpSenders=append(rtpSenders,rtpSender)
+		} else {
+			rtpSenders = append(rtpSenders, rtpSender)
 		}
 
 	}
@@ -303,7 +304,6 @@ func (r *RTC) UnPublish(senders ...*webrtc.RTPSender) error {
 	r.onNegotiationNeeded()
 	return nil
 }
-
 
 // CreateDataChannel create a custom datachannel
 func (r *RTC) CreateDataChannel(label string) (*webrtc.DataChannel, error) {
@@ -559,6 +559,7 @@ func (r *RTC) Connect() {
 	var err error
 
 	r.ctx, r.cancel = context.WithCancel(context.Background())
+	r.ctx = metadata.NewOutgoingContext(r.ctx, r.connector.Metadata)
 	r.client = rtc.NewRTCClient(r.connector.grpcConn)
 	r.stream, err = r.client.Signal(r.ctx)
 
