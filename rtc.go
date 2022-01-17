@@ -109,6 +109,11 @@ type RTCConfig struct {
 	WebRTC WebRTCTransportConfig `mapstructure:"webrtc"`
 }
 
+// Signaller sends and receives signalling messages with peers.
+// Signaller is derived from rtc.RTC_SignalClient, matching the
+// exported API of the GRPC Signal Service.
+// Signaller allows alternative signalling implementations
+// if the GRPC Signal Service does not fit your use case.
 type Signaller interface {
 	Send(request *rtc.Request) error
 	Recv() (*rtc.Reply, error)
