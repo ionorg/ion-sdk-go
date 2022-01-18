@@ -154,8 +154,9 @@ type RTC struct {
 }
 
 func NewRTC(config ...RTCConfig) *RTC {
-
-	r := &RTC{}
+	r := &RTC{
+		notify: make(chan struct{}),
+	}
 	r.ctx, r.cancel = context.WithCancel(context.Background())
 
 	if len(config) > 0 {
