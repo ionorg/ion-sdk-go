@@ -58,20 +58,24 @@ func NewEngine(addr string) *Engine {
 	return e
 }
 
-func (e *Engine) AddClient(sid, cid string) *sdk.RTC {
+func (e *Engine) AddClient(sid, cid string) (*sdk.RTC, error) {
 	e.Lock()
 	defer e.Unlock()
 	if e.clients[sid] == nil {
 		e.clients[sid] = make(map[string]*sdk.RTC)
 	}
 
-	c := sdk.NewRTC(e.connector)
+	c, err := sdk.NewRTC(e.connector)
+	if err != nil {
+		return nil, err
+	}
+
 	e.clients[sid][cid] = c
 	c.OnError = func(err error) {
 		log.Errorf("engine got error: %v", err)
 		e.DelClient(sid, cid)
 	}
-	return c
+	return c, nil
 }
 
 func (e *Engine) DelClient(sid, cid string) {
@@ -149,8 +153,12 @@ func run(e *Engine, addr, session, file, role string, total, duration, cycle int
 		case "pubsub":
 			cid := fmt.Sprintf("%s_pubsub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
-			c := e.AddClient(session, cid)
-			err := c.Join(session, cid)
+			c, err := e.AddClient(session, cid)
+			if err != nil {
+				log.Errorf("error: %v", err)
+				break
+			}
+			err = c.Join(session, cid)
 			if err != nil {
 				log.Errorf("error: %v", err)
 				break
@@ -164,14 +172,18 @@ func run(e *Engine, addr, session, file, role string, total, duration, cycle int
 		case "sub":
 			cid := fmt.Sprintf("%s_sub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
-			c := e.AddClient(session, cid)
+			c, err := e.AddClient(session, cid)
+			if err != nil {
+				log.Errorf("%v", err)
+				break
+			}
 
 			c.OnTrackEvent = func(event sdk.TrackEvent) {
 				_ = c.SubscribeFromEvent(event, audio, video, simulcast)
 			}
 
 			config := sdk.NewJoinConfig().SetNoAutoSubscribe()
-			err := c.Join(session, cid, config)
+			err = c.Join(session, cid, config)
 
 			if err != nil {
 				log.Errorf("%v", err)
@@ -181,8 +193,13 @@ func run(e *Engine, addr, session, file, role string, total, duration, cycle int
 		case "pub":
 			cid := fmt.Sprintf("%s_pub_%d_%s", session, i, cuid.New())
 			log.Infof("AddClient session=%v clientid=%v", session, cid)
-			c := e.AddClient(session, cid)
-			err := c.Join(session, cid)
+			c, err := e.AddClient(session, cid)
+			if err != nil {
+				log.Errorf("%v", err)
+				break
+			}
+
+			err = c.Join(session, cid)
 			if err != nil {
 				log.Errorf("%v", err)
 				break

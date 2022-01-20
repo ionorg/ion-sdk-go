@@ -32,7 +32,10 @@ func main() {
 	}
 
 	connector := sdk.NewConnector(addr)
-	rtc := sdk.NewRTC(connector, config)
+	rtc, err := sdk.NewRTC(connector, config)
+	if err != nil {
+		panic(err)
+	}
 
 	videoTrack, err := webrtc.NewTrackLocalStaticSample(webrtc.RTPCodecCapability{MimeType: "video/vp8"}, "video", "pion2")
 	if err != nil {

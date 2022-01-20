@@ -101,7 +101,11 @@ func main() {
 	// ===============================
 	room.OnJoin = func(success bool, info sdk.RoomInfo, err error) {
 		log.Infof("OnJoin success = %v, info = %v, err = %v", success, info, err)
-		rtc := sdk.NewRTC(connector)
+		rtc, err := sdk.NewRTC(connector)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		// subscribe rtp from sessoin
 		// comment this if you don't need save to file
 		rtc.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {

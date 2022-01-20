@@ -28,7 +28,10 @@ func main() {
 	flag.Parse()
 
 	connector := sdk.NewConnector(addr)
-	rtc := sdk.NewRTC(connector)
+	rtc, err := sdk.NewRTC(connector)
+	if err != nil {
+		panic(err)
+	}
 
 	rtc.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		fmt.Println("Got track")
@@ -74,7 +77,7 @@ func main() {
 				log.Debugf("Got Opus track, saving to disk as output.opus (48 kHz, 2 channels)")
 
 				if err := oggFile.WriteRTP(rtpPacket); err != nil {
-					log.Panicf("Error write ogg: ", err)
+					log.Panicf("Error write ogg: %v", err)
 				}
 			} else if codecName == "vp8" {
 				log.Debugf("Got VP8 track, saving to disk as output.ivf")
@@ -85,7 +88,7 @@ func main() {
 				}
 
 				if err := ivfFile.WriteRTP(rtpPacket); err != nil {
-					log.Panicf("Error write ivf: ", err)
+					log.Panicf("Error write ivf: %v", err)
 				}
 			}
 
@@ -93,7 +96,7 @@ func main() {
 	}
 
 	// client join a session
-	err := rtc.Join(session, sdk.RandomKey(4))
+	err = rtc.Join(session, sdk.RandomKey(4))
 
 	// publish file to session if needed
 	if err != nil {
