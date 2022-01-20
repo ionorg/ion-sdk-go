@@ -27,13 +27,11 @@ func main() {
 	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
-	rtc := sdk.NewRTC()
 	connector := sdk.NewConnector(addr)
-	signaller, err := connector.Signal(rtc)
+	rtc, err := sdk.NewRTC(connector)
 	if err != nil {
 		panic(err)
 	}
-	rtc.Start(signaller)
 
 	rtc.OnTrack = func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		fmt.Println("Got track")

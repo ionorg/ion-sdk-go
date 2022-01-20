@@ -101,12 +101,10 @@ func main() {
 	// ===============================
 	room.OnJoin = func(success bool, info sdk.RoomInfo, err error) {
 		log.Infof("OnJoin success = %v, info = %v, err = %v", success, info, err)
-		rtc := sdk.NewRTC()
-		signaller, err := connector.Signal(rtc)
+		rtc, err := sdk.NewRTC(connector)
 		if err != nil {
-			log.Fatalf("failed to create grpc signaller, err: %v", err)
+			log.Fatal(err)
 		}
-		rtc.Start(signaller)
 
 		// subscribe rtp from sessoin
 		// comment this if you don't need save to file

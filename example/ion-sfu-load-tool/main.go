@@ -65,12 +65,10 @@ func (e *Engine) AddClient(sid, cid string) (*sdk.RTC, error) {
 		e.clients[sid] = make(map[string]*sdk.RTC)
 	}
 
-	c := sdk.NewRTC()
-	signaller, err := e.connector.Signal(c)
+	c, err := sdk.NewRTC(e.connector)
 	if err != nil {
 		return nil, err
 	}
-	c.Start(signaller)
 
 	e.clients[sid][cid] = c
 	c.OnError = func(err error) {

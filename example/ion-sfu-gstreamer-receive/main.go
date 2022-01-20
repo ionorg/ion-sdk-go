@@ -29,7 +29,10 @@ func runClientLoop(addr, session string) {
 	// new sdk engine
 	connector := sdk.NewConnector(addr)
 
-	rtc := sdk.NewRTC(connector)
+	rtc, err := sdk.NewRTC(connector)
+	if err != nil {
+		panic(err)
+	}
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
@@ -70,7 +73,7 @@ func runClientLoop(addr, session string) {
 	}
 
 	// client join a session
-	err := rtc.Join(session, sdk.RandomKey(4))
+	err = rtc.Join(session, sdk.RandomKey(4))
 
 	// publish file to session if needed
 	if err != nil {

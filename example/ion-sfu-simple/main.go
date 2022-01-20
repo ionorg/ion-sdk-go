@@ -56,14 +56,11 @@ func main() {
 
 	log.Init(logLevel)
 
-	rtc := sdk.NewRTC()
 	connector := sdk.NewConnector(addr)
-	signaller, err := connector.Signal(rtc)
+	rtc, err := sdk.NewRTC(connector)
 	if err != nil {
-		log.Errorf("error: %v", err)
-		return
+		panic(err)
 	}
-	rtc.Start(signaller)
 
 	// user define receiving rtp
 	rtc.OnTrack = saveToDisk

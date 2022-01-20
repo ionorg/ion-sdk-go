@@ -65,7 +65,10 @@ func main() {
 	flag.Parse()
 
 	connector := sdk.NewConnector(addr)
-	rtc := sdk.NewRTC(connector)
+	rtc, err := sdk.NewRTC(connector)
+	if err != nil {
+		panic(err)
+	}
 
 	// Create new Webm saver
 	var onceTrackAudio sync.Once
@@ -88,7 +91,7 @@ func main() {
 	}
 
 	// client join a session
-	err := rtc.Join(session, sdk.RandomKey(4))
+	err = rtc.Join(session, sdk.RandomKey(4))
 
 	if err != nil {
 		log.Errorf("error: %v", err)

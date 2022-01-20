@@ -153,7 +153,7 @@ type RTC struct {
 	sync.Mutex
 }
 
-func NewRTC(config ...RTCConfig) *RTC {
+func withConfig(config ...RTCConfig) *RTC {
 	r := &RTC{
 		notify: make(chan struct{}),
 	}
@@ -166,7 +166,22 @@ func NewRTC(config ...RTCConfig) *RTC {
 	return r
 }
 
-func (r *RTC) Start(signaller Signaller) {
+// NewRTC creates an RTC using the default GRPC signaller
+func NewRTC(connector *Connector, config ...RTCConfig) (*RTC, error) {
+	r := withConfig(config...)
+	signaller, err := connector.Signal(r)
+	r.start(signaller)
+	return r, err
+}
+
+// NewRTCWithSignaller creates an RTC with a specified signaller
+func NewRTCWithSignaller(signaller Signaller, config ...RTCConfig) *RTC {
+	r := withConfig(config...)
+	r.start(signaller)
+	return r
+}
+
+func (r *RTC) start(signaller Signaller) {
 	r.signaller = signaller
 
 	if !r.Connected() {

@@ -128,13 +128,11 @@ func main() {
 	flag.StringVar(&session, "session", "ion", "join session name")
 	flag.Parse()
 
-	rtc := sdk.NewRTC()
 	connector := sdk.NewConnector(addr)
-	signaller, err := connector.Signal(rtc)
+	rtc, err := sdk.NewRTC(connector)
 	if err != nil {
 		log.Fatal(err)
 	}
-	rtc.Start(signaller)
 
 	// subscribe rtp from sessoin
 	// comment this if you don't need save to file
