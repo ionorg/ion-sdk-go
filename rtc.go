@@ -159,7 +159,8 @@ func NewRTC(connector *Connector, config ...RTCConfig) *RTC {
 		r.Connect()
 	}
 	r.pub = NewTransport(Target_PUBLISHER, r)
-	r.sub = NewTransport(Target_PUBLISHER, r)
+	r.sub = NewTransport(Target_SUBSCRIBER, r)
+	r.notify = make(chan struct{}, 1)
 	return r
 }
 
@@ -567,7 +568,7 @@ func (r *RTC) Connect() {
 		log.Errorf("error: %v", err)
 		return
 	}
-	go r.onSingalHandleOnce()
+	go r.onSignalHandleOnce()
 	r.connected = true
 }
 
@@ -575,18 +576,18 @@ func (r *RTC) Connected() bool {
 	return r.connected
 }
 
-func (r *RTC) onSingalHandleOnce() {
-	// onSingalHandle is wrapped in a once and only started after another public
+func (r *RTC) onSignalHandleOnce() {
+	// onSignalHandle is wrapped in a once and only started after another public
 	// method is called to ensure the user has the opportunity to register handlers
 	r.handleOnce.Do(func() {
-		err := r.onSingalHandle()
+		err := r.onSignalHandle()
 		if r.OnError != nil {
 			r.OnError(err)
 		}
 	})
 }
 
-func (r *RTC) onSingalHandle() error {
+func (r *RTC) onSignalHandle() error {
 	for {
 		//only one goroutine for recving from stream, no need to lock
 		stream, err := r.stream.Recv()
@@ -703,7 +704,7 @@ func (r *RTC) onSingalHandle() error {
 
 func (r *RTC) SendJoin(sid string, uid string, offer webrtc.SessionDescription, config map[string]string) error {
 	log.Infof("[C=>S] [%v] sid=%v", r.uid, sid)
-	go r.onSingalHandleOnce()
+	go r.onSignalHandleOnce()
 	r.Lock()
 	err := r.stream.Send(
 		&rtc.Request{
@@ -735,7 +736,7 @@ func (r *RTC) SendTrickle(candidate *webrtc.ICECandidate, target Target) {
 		log.Errorf("error: %v", err)
 		return
 	}
-	go r.onSingalHandleOnce()
+	go r.onSignalHandleOnce()
 	r.Lock()
 	err = r.stream.Send(
 		&rtc.Request{
@@ -755,7 +756,7 @@ func (r *RTC) SendTrickle(candidate *webrtc.ICECandidate, target Target) {
 
 func (r *RTC) SendOffer(sdp webrtc.SessionDescription) error {
 	log.Infof("[C=>S] [%v] sdp=%v", r.uid, sdp)
-	go r.onSingalHandleOnce()
+	go r.onSignalHandleOnce()
 	r.Lock()
 	err := r.stream.Send(
 		&rtc.Request{
