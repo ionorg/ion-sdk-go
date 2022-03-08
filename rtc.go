@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"google.golang.org/grpc/metadata"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 
 	log "github.com/pion/ion-log"
 	"github.com/pion/ion/proto/rtc"
@@ -893,6 +894,7 @@ func (r *RTC) SubscribeFromEvent(event TrackEvent, audio, video bool, layer stri
 // Close client close
 func (r *RTC) Close() {
 	log.Infof("id=%v", r.uid)
+	r.connected = false
 	close(r.notify)
 	if r.pub != nil {
 		r.pub.pc.Close()
