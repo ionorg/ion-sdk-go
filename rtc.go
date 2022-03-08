@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"google.golang.org/grpc/metadata"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 
 	log "github.com/pion/ion-log"
 	"github.com/pion/ion/proto/rtc"
@@ -592,6 +593,7 @@ func (r *RTC) onSignalHandle() error {
 		//only one goroutine for recving from stream, no need to lock
 		stream, err := r.stream.Recv()
 		if err != nil {
+			r.connected = false
 			if err == io.EOF {
 				log.Infof("[%v] WebRTC Transport Closed", r.uid)
 				if err := r.stream.CloseSend(); err != nil {
