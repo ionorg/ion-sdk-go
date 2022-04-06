@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	MimeTypeH264 = "video/h264"
+	MimeTypeH264 = "video/H264"
 	MimeTypeOpus = "audio/opus"
-	MimeTypeVP8  = "video/vp8"
-	MimeTypeVP9  = "video/vp9"
+	MimeTypeVP8  = "video/VP8"
+	MimeTypeVP9  = "video/VP9"
 )
 
 var (
