@@ -129,6 +129,7 @@ type RTC struct {
 	OnError       func(error)
 	OnTrackEvent  func(event TrackEvent)
 	OnSpeaker     func(event []string)
+	OnGoAway      func()
 
 	producer *WebMProducer
 	recvByte int
@@ -697,8 +698,14 @@ func (r *RTC) onSignalHandle() error {
 			if !payload.Subscription.Success {
 				log.Errorf("suscription error: %v", payload.Subscription.Error)
 			}
+		case *rtc.Reply_Error:
+			if payload.Error.Reason == "goaway" && r.OnGoAway != nil {
+				r.OnGoAway()
+			} else {
+				log.Errorf("Unhandled RTC error!!!!%v", payload)
+			}
 		default:
-			log.Errorf("Unknow RTC type!!!!%v", payload)
+			log.Errorf("Unknown RTC type!!!!%v", payload)
 		}
 	}
 }
